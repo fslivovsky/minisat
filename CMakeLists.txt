@@ -33,3 +33,10 @@ add_subdirectory(utils)
 add_subdirectory(core)
 add_subdirectory(simp)
 
+
+add_library(minisat STATIC 
+  $<TARGET_OBJECTS:minisat_utils>
+  $<TARGET_OBJECTS:minisat_core>
+  $<TARGET_OBJECTS:minisat_simp>)
+
+install (TARGETS minisat ARCHIVE DESTINATION lib)
