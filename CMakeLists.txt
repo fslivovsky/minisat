@@ -32,7 +32,7 @@ include_directories(
 add_subdirectory(utils)
 add_subdirectory(core)
 add_subdirectory(simp)
-
+add_subdirectory(mtl)
 
 add_library(minisat STATIC 
   $<TARGET_OBJECTS:minisat_utils>
