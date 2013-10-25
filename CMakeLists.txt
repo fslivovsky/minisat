@@ -34,9 +34,19 @@ add_subdirectory(core)
 add_subdirectory(simp)
 add_subdirectory(mtl)
 
-add_library(minisat STATIC 
+add_library(minisat.LIB STATIC 
   $<TARGET_OBJECTS:minisat_utils>
   $<TARGET_OBJECTS:minisat_core>
   $<TARGET_OBJECTS:minisat_simp>)
 
-install (TARGETS minisat ARCHIVE DESTINATION lib)
+set_target_properties(minisat.LIB 
+  PROPERTIES OUTPUT_NAME "minisat")
+
+add_executable (minisat simp/Main.cc)
+target_link_libraries (minisat minisat.LIB z)
+
+
+install (TARGETS minisat.LIB minisat 
+  RUNTIME DESTINATION bin
+  ARCHIVE DESTINATION lib)
+
