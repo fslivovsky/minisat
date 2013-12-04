@@ -45,8 +45,13 @@ set_target_properties(minisat.LIB
 add_executable (minisat simp/Main.cc)
 target_link_libraries (minisat minisat.LIB z)
 
+add_executable (minisat_core.BIN core/Main.cc)
+set_target_properties (minisat_core.BIN 
+  PROPERTIES OUTPUT_NAME "minisat_core")
+target_link_libraries (minisat_core.BIN minisat.LIB z)
 
-install (TARGETS minisat.LIB minisat 
+
+install (TARGETS minisat.LIB minisat minisat_core.BIN
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
 
