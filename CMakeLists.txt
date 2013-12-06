@@ -25,7 +25,7 @@ mark_as_advanced(RT_LIB)
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
 include_directories(
-  ${CMAKE_CURRENT_BINARY_DIR}/includ
+  ${CMAKE_CURRENT_BINARY_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}
   )
 
