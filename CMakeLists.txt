@@ -29,6 +29,8 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}
   )
 
+add_definitions(-D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
+
 add_subdirectory(utils)
 add_subdirectory(core)
 add_subdirectory(simp)
