@@ -213,7 +213,7 @@ protected:
     bool                asynch_interrupt;
 
     // Interpolation related data structures
-    vec<PartRange> partInfo;
+    vec<Range> partInfo;
     unsigned currentPart;
 
     // Main internal methods:

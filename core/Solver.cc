@@ -126,7 +126,7 @@ Var Solver::newVar(bool sign, bool dvar)
     trail    .capacity(v+1);
     setDecisionVar(v, dvar);
 
-    partInfo.push(PartRange(0,0));
+    partInfo.push(Range ());
 
     return v;
 }
@@ -157,20 +157,12 @@ bool Solver::addClause_(vec<Lit>& ps)
         clauses.push(cr);
         attachClause(cr);
 
-        // Clause is added, take care of partitions.
-        // Assuming that minimum partition is 1 (not 0).
         // Also assuming that clauses are added in order: partition 1 first,
         // then partition 2, etc...
         Clause& c = ca[cr];
-        c.setPart(currentPart);
-        c.setOffset(0);
-        for (i = 0; i < ps.size(); i++) {
-            Var v = var(ps[i]);
-            if (partInfo[v].part == 0)
-                partInfo[v].part = currentPart;
-            else
-                partInfo[v].offset = (currentPart - partInfo[v].offset);
-        }
+        c.part ().join (currentPart);
+        for (i = 0; i < ps.size(); i++) 
+          partInfo[var (ps[i])].join (currentPart);
     }
 
     return true;

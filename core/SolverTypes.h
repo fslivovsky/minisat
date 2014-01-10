@@ -115,26 +115,46 @@ public:
 inline int   toInt  (lbool l) { return l.value; }
 inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 
-class PartRange
+class Range
 {
-public:
-    PartRange(unsigned p, unsigned o) : part(p), offset(o) {}
+  unsigned part    : 16;
+  unsigned offset  : 16;
 
-    void join (unsigned addedPart)    { part += addedPart; offset += addedPart; }
-    void join(const PartRange& other) {
-        part   = std::min(this->part, other.part);
-        offset = std::max(this->offset, other.offset);
-    }
+ public:
+  enum { part_Undef = 0 };
+  
+  Range () : part (part_Undef), offset (0) {}
+  Range (unsigned p) : part (p), offset (0) {}
 
-    static inline unsigned max(const PartRange& r1, const PartRange& r2) {
-        return std::max(r1.part + r1.offset, r2.part + r2.offset);
-    }
-    static inline unsigned min(const PartRange& r1, const PartRange& r2) {
-        return std::min(r1.part, r2.part);
-    }
-
-    unsigned part    : 16;
-    unsigned offset  : 16;
+  bool undef () { return part == part_Undef; }
+  
+  void join (unsigned np)    
+  { 
+    if (undef ()) part = np;
+    else if (np > max ())
+      {
+        // -- increase offset to include np
+        unsigned no = np - part;
+        if (no > offset) offset = no;
+        assert (offset >= no && "Overflow");
+      }
+    else if (np < min ())
+      {
+        unsigned m = max ();
+        // -- reset current partition to new min
+        part = np;
+        offset = 0;
+        // -- extend to include old max
+        join (m);
+      }
+  }
+  void join(const Range& o) 
+  {
+    join (o.min ());
+    join (o.max ());
+  }
+  unsigned min () const { return part; }
+  unsigned max () const { return part + offset; }
 };
 
 //=================================================================================================
@@ -150,14 +170,14 @@ class Clause {
         unsigned has_extra : 1;
         unsigned reloced   : 1;
         unsigned size      : 27; }                        header;
-    PartRange                                             part;
+    Range                                                 partition;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
 
     friend class ClauseAllocator;
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
-    Clause(const V& ps, bool use_extra, bool learnt) : part(0,0) {
+    Clause(const V& ps, bool use_extra, bool learnt) {
         header.mark      = 0;
         header.learnt    = learnt;
         header.has_extra = use_extra;
@@ -208,10 +228,8 @@ public:
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
 
-    unsigned     getPart()                { return part.part;   }
-    unsigned     getOffset()              { return part.offset; }
-    void         setPart(unsigned p)      { part.part = p;      }
-    void         setOffset(unsigned o)    { part.offset = o;    }
+  Range&       part () { return partition; }
+  void         part (const Range &v) { partition = v; }
 };
 
 
@@ -272,6 +290,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // Copy extra data-fields: 
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
+        to[cr].part (c.part ());
         if (to[cr].learnt())         to[cr].activity() = c.activity();
         else if (to[cr].has_extra()) to[cr].calcAbstraction();
     }
