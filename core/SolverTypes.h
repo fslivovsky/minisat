@@ -130,7 +130,7 @@ public:
         return std::max(r1.part + r1.offset, r2.part + r2.offset);
     }
     static inline unsigned min(const PartRange& r1, const PartRange& r2) {
-        return std::min(r1.part + r1.offset, r2.part + r2.offset);
+        return std::min(r1.part, r2.part);
     }
 
     unsigned part    : 16;
