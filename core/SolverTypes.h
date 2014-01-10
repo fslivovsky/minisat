@@ -114,6 +114,14 @@ public:
 inline int   toInt  (lbool l) { return l.value; }
 inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 
+class PartRange
+{
+public:
+    PartRange(unsigned p, unsigned o) : part(p), offset(o) {}
+    unsigned part    : 16;
+    unsigned offset  : 16;
+};
+
 //=================================================================================================
 // Clause -- a simple class for representing a clause:
 
@@ -126,17 +134,15 @@ class Clause {
         unsigned learnt    : 1;
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned size      : 27; }                            header;
+        unsigned size      : 27; }                        header;
+    PartRange                                             part;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
-    struct {
-        unsigned min  : 16;
-        unsigned max  : 16; } part;
 
     friend class ClauseAllocator;
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
     template<class V>
-    Clause(const V& ps, bool use_extra, bool learnt) {
+    Clause(const V& ps, bool use_extra, bool learnt) : part(0,0) {
         header.mark      = 0;
         header.learnt    = learnt;
         header.has_extra = use_extra;
@@ -187,10 +193,10 @@ public:
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
 
-    unsigned     getMinPart()                { return part.min; }
-    unsigned     getMaxPart()                { return part.max; }
-    void         setMinPart(unsigned p)      { part.min = p;    }
-    void         setMaxPart(unsigned p)      { part.max = p;    }
+    unsigned     getPart()                { return part.part;   }
+    unsigned     getOffset()              { return part.offset; }
+    void         setPart(unsigned p)      { part.part = p;      }
+    void         setOffset(unsigned o)    { part.offset = o;    }
 };
 
 

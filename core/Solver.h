@@ -213,16 +213,7 @@ protected:
     bool                asynch_interrupt;
 
     // Interpolation related data structures
-    struct VarPartitionInfo {
-        unsigned part   : 16;
-        unsigned offset : 16;
-    };
-    static inline VarPartitionInfo mkVarPartitionInfo(unsigned p, unsigned o)
-    {
-        VarPartitionInfo i = {p, o};
-        return i;
-    }
-    vec<VarPartitionInfo> partInfo;
+    vec<PartRange> partInfo;
     unsigned currentPart;
 
     // Main internal methods:
