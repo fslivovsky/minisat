@@ -23,6 +23,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Minisat_SolverTypes_h
 
 #include <assert.h>
+#include <algorithm>
 
 #include "mtl/IntTypes.h"
 #include "mtl/Alg.h"
@@ -118,6 +119,20 @@ class PartRange
 {
 public:
     PartRange(unsigned p, unsigned o) : part(p), offset(o) {}
+
+    void join (unsigned addedPart)    { part += addedPart; offset += addedPart; }
+    void join(const PartRange& other) {
+        part   = std::min(this->part, other.part);
+        offset = std::max(this->offset, other.offset);
+    }
+
+    static inline unsigned max(const PartRange& r1, const PartRange& r2) {
+        return std::max(r1.part + r1.offset, r2.part + r2.offset);
+    }
+    static inline unsigned min(const PartRange& r1, const PartRange& r2) {
+        return std::min(r1.part + r1.offset, r2.part + r2.offset);
+    }
+
     unsigned part    : 16;
     unsigned offset  : 16;
 };
