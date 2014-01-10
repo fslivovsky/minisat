@@ -64,7 +64,12 @@ static void parse_DIMACS_main(B& in, Solver& S) {
                 printf("PARSE ERROR! Unexpected char: %c\n", *in), exit(3);
             }
         } else if (*in == 'c' || *in == 'p')
+          {
+            if (eagerMatch (in, "c parition")) 
+              S.setCurrentPart (S.getCurrentPart () + 1);
             skipLine(in);
+          }
+        
         else{
             cnt++;
             readClause(in, S, lits);
