@@ -138,6 +138,8 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
+    void setCurrentPart(unsigned n) { currentPart = n; }
+
 protected:
 
     // Helper structures:
@@ -209,6 +211,19 @@ protected:
     int64_t             conflict_budget;    // -1 means no budget.
     int64_t             propagation_budget; // -1 means no budget.
     bool                asynch_interrupt;
+
+    // Interpolation related data structures
+    struct VarPartitionInfo {
+        unsigned part   : 16;
+        unsigned offset : 16;
+    };
+    static inline VarPartitionInfo mkVarPartitionInfo(unsigned p, unsigned o)
+    {
+        VarPartitionInfo i = {p, o};
+        return i;
+    }
+    vec<VarPartitionInfo> partInfo;
+    unsigned currentPart;
 
     // Main internal methods:
     //

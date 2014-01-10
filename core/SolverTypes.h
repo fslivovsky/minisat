@@ -128,6 +128,9 @@ class Clause {
         unsigned reloced   : 1;
         unsigned size      : 27; }                            header;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
+    struct {
+        unsigned min  : 16;
+        unsigned max  : 16; } part;
 
     friend class ClauseAllocator;
 
@@ -183,6 +186,11 @@ public:
 
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
+
+    unsigned     getMinPart()                { return part.min; }
+    unsigned     getMaxPart()                { return part.max; }
+    void         setMinPart(unsigned p)      { part.min = p;    }
+    void         setMaxPart(unsigned p)      { part.max = p;    }
 };
 
 
