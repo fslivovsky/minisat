@@ -139,6 +139,8 @@ public:
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
     void setCurrentPart(unsigned n) { currentPart = n; }
+    unsigned getCurrentPart () { return currentPart; }
+    
 
 protected:
 
