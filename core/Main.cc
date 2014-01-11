@@ -168,6 +168,8 @@ int main(int argc, char** argv)
             printStats(S);
             printf("\n"); }
         printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
+        if (ret == l_False && S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
+        if (ret == l_False && S.proofLogging ()) S.replay ();
         if (res != NULL){
             if (ret == l_True){
                 fprintf(res, "SAT\n");
