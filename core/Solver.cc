@@ -108,6 +108,201 @@ Solver::~Solver()
 }
 
 
+// === Validation
+
+bool Solver::validate ()
+{
+  assert (log_proof);
+  assert (!ok);
+  assert (proof.size () > 0);
+
+
+  // -- final conflict clause is in the core
+  Clause &last = ca [proof.last ()];
+  last.core (1);
+  // -- mark all reasons for the final conflict as core
+  for (int i = 0; i < last.size (); i++)
+    {
+      // -- validate that the clause is really a conflict clause
+      if (value (last [i]) != l_False) return false;
+      Var x = var (last [i]);
+      ca [reason (x)].core (1);
+    }
+
+  int trail_sz = trail.size ();
+  ok = true;
+  // -- move back through the proof, shrinking the trail and
+  // -- validating the clauses
+  for (int i = proof.size () - 2; i >= 0; i--)
+    {
+      if (verbosity >= 2) fflush (stdout);
+      CRef cr = proof [i];
+      assert (cr != CRef_Undef);
+      Clause &c = ca [cr];
+      
+      //if (verbosity >= 2) printf ("Validating lemma #%d ... ", i);
+
+      // -- resurect deleted clauses
+      if (c.mark () == 1)
+        {
+          // -- undelete
+          c.mark (0);
+          Var x = var (c[0]);
+
+          // -- if non-unit clause, attach it
+          if (c.size () > 1) attachClause (cr);
+          else // -- if unit clause, enqueue it
+            { 
+              bool res = enqueue (c[0], cr);
+              assert (res);
+            }
+          if (verbosity >= 2) printf ("^");
+          continue;
+        }
+
+      assert (c.mark () == 0);
+      // -- detach the clause
+      if (locked (c))
+        {
+          // -- undo the bcp
+          while (trail[trail_sz - 1] != c[0]) 
+            {
+              Var x = var (trail [trail_sz - 1]);
+              assigns [x] = l_Undef;
+              insertVarOrder (x);
+              trail_sz--;
+
+              CRef r = reason (x);
+              assert (r != CRef_Undef);
+              // -- mark literals of core clause as core
+              if (ca [r].core ())
+                {
+                  Clause &rc = ca [r];
+                  for (int j = 1; j < rc.size (); ++j)
+                    {
+                      Var x = var (rc [j]);
+                      ca [reason (x)].core (1);
+                    }
+                }
+            }
+          assert (c[0] == trail [trail_sz - 1]);
+          // -- unassign the variable
+          assigns [var (c[0])] = l_Undef;
+          // -- put it back in order heap in case we want to restart
+          // -- solving in the future
+          insertVarOrder (var (c[0]));
+          trail_sz--;
+        }
+      // -- unit clauses don't need to be detached from watched literals
+      if (c.size () > 1) detachClause (cr);
+      // -- mark clause deleted
+      c.mark (1);
+
+            
+      if (c.core () == 1)
+        {
+          assert (value (c[0]) == l_Undef);
+          // -- put trail in a good state
+          trail.shrink (trail.size () - trail_sz);
+          qhead = trail.size ();
+          trail_lim [0] = trail.size ();
+          if (verbosity >= 2) printf ("V");
+          if (!validateLemma (cr)) return false;
+        }
+      else if (verbosity >= 2) printf ("-");
+
+      
+    }
+  if (verbosity >= 2) printf ("\n");
+
+  // find core clauses in the rest of the trail
+  for (int i = trail.size () - 1; i <= 0; --i)
+    {
+      assert (reason (var (trail [i])) != CRef_Undef);
+      Clause &c = ca [reason (var (trail [i]))];
+      // -- if c is core, mark all clauses it depends as core
+      if (c.core () == 1)
+        for (int j = 1; j < c.size (); ++j)
+          {
+            Var x = var (c[j]);
+            ca[reason (x)].core (1);
+          }
+      
+    }
+
+  if (verbosity >= 1) printf ("VALIDATED\n");
+  return true;
+}
+
+bool Solver::validateLemma (CRef cr)
+{
+  assert (decisionLevel () == 0);
+  assert (ok);
+  
+  Clause &lemma = ca [cr];
+  assert (lemma.core ());
+  assert (!locked (lemma));
+
+  // -- go to decision level 1
+  newDecisionLevel ();
+
+  for (int i = 0; i < lemma.size (); ++i) 
+    enqueue (~lemma [i]);
+  
+  // -- go to decision level 2
+  newDecisionLevel ();
+  
+  CRef confl = propagate ();
+  if (confl == CRef_Undef) 
+    { 
+      if (verbosity >= 2) printf ("FAILED: No Conflict from propagate()\n");
+      return false;
+    }
+  Clause &conflC = ca [confl];
+  conflC.core (1);
+  for (int i = 0; i < conflC.size (); ++i)
+    {
+      Var x = var (conflC [i]);
+      // -- if the variable got value by propagation, 
+      // -- mark it to be unrolled
+      if (level (x) > 1) seen [x] = 1;
+      else if (level (x) <= 0) ca [reason(x)].core (1);
+    }
+
+  for (int i = trail.size () - 1; i >= trail_lim[1]; i--)
+    {
+      Var x = var (trail [i]);
+      if (!seen [x]) continue;
+      
+      seen [x] = 0;
+      assert (reason (x) != CRef_Undef);
+      Clause &c = ca [reason (x)];
+      c.core (1);
+
+      assert (value (c[0]) == l_True);
+      // -- for all other literals in the reason
+      for (int j = 1; j < c.size (); ++j)
+        {
+          Var y = var (c [j]);
+          assert (value (c [j]) == l_False);
+
+          // -- if the literal is assigned at level 2, 
+          // -- mark it for processing
+          if (level (y) > 1) seen [y] = 1;
+          // -- else if the literal is assigned at level 0,
+          // -- mark its reason clause as core
+          else if (level (y) <= 0)
+            // -- mark the reason for y as core
+            ca[reason (y)].core (1);
+        }
+    }
+  // reset
+  cancelUntil (0);
+  ok = true;
+  return true;
+}
+
+
 //=================================================================================================
 // Minor methods:
 

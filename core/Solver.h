@@ -73,6 +73,12 @@ public:
     void    toDimacs     (const char* file, Lit p);
     void    toDimacs     (const char* file, Lit p, Lit q);
     void    toDimacs     (const char* file, Lit p, Lit q, Lit r);
+
+    // Proof validation / traversal
+    bool    validate ();
+
+    bool    proofLogging () { return log_proof;}
+    void    proofLogging (bool v) { log_proof = v;}
     
     // Variable mode:
     // 
@@ -141,6 +147,7 @@ public:
 
     void setCurrentPart(unsigned n) { currentPart = n; }
     unsigned getCurrentPart () { return currentPart; }
+    
     
 
 protected:
@@ -238,6 +245,7 @@ protected:
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
 
+    bool     validateLemma (CRef c);
     // Maintaining Variable/Clause activity:
     //
     void     varDecayActivity ();                      // Decay all variables with the specified factor. Implemented by increasing the 'bump' value instead.
