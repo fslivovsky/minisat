@@ -65,7 +65,7 @@ static void parse_DIMACS_main(B& in, Solver& S) {
             }
         } else if (*in == 'c' || *in == 'p')
           {
-            if (eagerMatch (in, "c parition")) 
+            if (eagerMatch (in, "c partition"))
               S.setCurrentPart (S.getCurrentPart () + 1);
             skipLine(in);
           }
