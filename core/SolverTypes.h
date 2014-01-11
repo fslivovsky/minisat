@@ -169,7 +169,8 @@ class Clause {
         unsigned learnt    : 1;
         unsigned has_extra : 1;
         unsigned reloced   : 1;
-        unsigned size      : 27; }                        header;
+        unsigned core      : 1;
+        unsigned size      : 26; }                        header;
     Range                                                 partition;
     union { Lit lit; float act; uint32_t abs; CRef rel; } data[0];
 
@@ -182,6 +183,7 @@ class Clause {
         header.learnt    = learnt;
         header.has_extra = use_extra;
         header.reloced   = 0;
+        header.core = 0;
         header.size      = ps.size();
 
         for (int i = 0; i < ps.size(); i++) 
@@ -215,6 +217,10 @@ public:
     bool         reloced     ()      const   { return header.reloced; }
     CRef         relocation  ()      const   { return data[0].rel; }
     void         relocate    (CRef c)        { header.reloced = 1; data[0].rel = c; }
+
+
+    bool         core        ()      const   { return header.core; }
+    void         core        (uint32_t c)    { header.core = c; }
 
     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
     //       subsumption operations to behave correctly.
@@ -290,6 +296,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // Copy extra data-fields: 
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
+        to[cr].core(c.core());
         to[cr].part (c.part ());
         if (to[cr].learnt())         to[cr].activity() = c.activity();
         else if (to[cr].has_extra()) to[cr].calcAbstraction();

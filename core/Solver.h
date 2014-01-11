@@ -73,6 +73,13 @@ public:
     void    toDimacs     (const char* file, Lit p);
     void    toDimacs     (const char* file, Lit p, Lit q);
     void    toDimacs     (const char* file, Lit p, Lit q, Lit r);
+
+    // Proof validation / traversal
+    bool    validate ();  // validates clausal proof
+    void    replay (); // replays clausal proof AFTER validation
+
+    bool    proofLogging () { return log_proof;}
+    void    proofLogging (bool v) { log_proof = v;}
     
     // Variable mode:
     // 
@@ -114,6 +121,7 @@ public:
     // Mode of operation:
     //
     int       verbosity;
+    bool      log_proof; // Enable proof logging
     double    var_decay;
     double    clause_decay;
     double    random_var_freq;
@@ -140,6 +148,7 @@ public:
 
     void setCurrentPart(unsigned n) { currentPart = n; }
     unsigned getCurrentPart () { return currentPart; }
+    
     
 
 protected:
@@ -175,6 +184,7 @@ protected:
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           proof;            // Clausal proof
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
     double              var_inc;          // Amount to bump next variable with.
@@ -225,7 +235,7 @@ protected:
     void     newDecisionLevel ();                                                      // Begins a new decision level.
     void     uncheckedEnqueue (Lit p, CRef from = CRef_Undef);                         // Enqueue a literal. Assumes value of literal is undefined.
     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
-    CRef     propagate        ();                                                      // Perform unit propagation. Returns possibly conflicting clause.
+    CRef     propagate        (bool coreOnly = false);                                                      // Perform unit propagation. Returns possibly conflicting clause.
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
@@ -236,6 +246,7 @@ protected:
     void     removeSatisfied  (vec<CRef>& cs);                                         // Shrink 'cs' to contain only non-satisfied clauses.
     void     rebuildOrderHeap ();
 
+    bool     validateLemma (CRef c);
     // Maintaining Variable/Clause activity:
     //
     void     varDecayActivity ();                      // Decay all variables with the specified factor. Implemented by increasing the 'bump' value instead.

@@ -35,13 +35,15 @@ static DoubleOption  opt_var_decay         (_cat, "var-decay",   "The variable a
 static DoubleOption  opt_clause_decay      (_cat, "cla-decay",   "The clause activity decay factor",              0.999,    DoubleRange(0, false, 1, false));
 static DoubleOption  opt_random_var_freq   (_cat, "rnd-freq",    "The frequency with which the decision heuristic tries to choose a random variable", 0, DoubleRange(0, true, 1, true));
 static DoubleOption  opt_random_seed       (_cat, "rnd-seed",    "Used by the random variable selection",         91648253, DoubleRange(0, false, HUGE_VAL, false));
-static IntOption     opt_ccmin_mode        (_cat, "ccmin-mode",  "Controls conflict clause minimization (0=none, 1=basic, 2=deep)", 2, IntRange(0, 2));
+static IntOption     opt_ccmin_mode        (_cat, "ccmin-mode",  "Controls conflict clause minimization (0=none, 1=basic, 2=deep)", 0, IntRange(0, 2));
 static IntOption     opt_phase_saving      (_cat, "phase-saving", "Controls the level of phase saving (0=none, 1=limited, 2=full)", 2, IntRange(0, 2));
 static BoolOption    opt_rnd_init_act      (_cat, "rnd-init",    "Randomize the initial activity", false);
 static BoolOption    opt_luby_restart      (_cat, "luby",        "Use the Luby restart sequence", true);
 static IntOption     opt_restart_first     (_cat, "rfirst",      "The base restart interval", 100, IntRange(1, INT32_MAX));
 static DoubleOption  opt_restart_inc       (_cat, "rinc",        "Restart interval increase factor", 2, DoubleRange(1, false, HUGE_VAL, false));
-static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  0.20, DoubleRange(0, false, HUGE_VAL, false));
+static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  HUGE_VAL, DoubleRange(0, false, HUGE_VAL, false));
+
+static BoolOption    opt_valid          (_cat, "valid",    "Validate UNSAT answers", false);
 
 
 //=================================================================================================
@@ -53,6 +55,7 @@ Solver::Solver() :
     // Parameters (user settable):
     //
     verbosity        (0)
+  , log_proof (opt_valid)
   , var_decay        (opt_var_decay)
   , clause_decay     (opt_clause_decay)
   , random_var_freq  (opt_random_var_freq)
@@ -105,6 +108,276 @@ Solver::~Solver()
 }
 
 
+// === Validation
+
+bool Solver::validate ()
+{
+  assert (log_proof);
+  assert (!ok);
+  assert (proof.size () > 0);
+
+
+  // -- final conflict clause is in the core
+  Clause &last = ca [proof.last ()];
+  last.core (1);
+  // -- mark all reasons for the final conflict as core
+  for (int i = 0; i < last.size (); i++)
+    {
+      // -- validate that the clause is really a conflict clause
+      if (value (last [i]) != l_False) return false;
+      Var x = var (last [i]);
+      ca [reason (x)].core (1);
+    }
+
+  int trail_sz = trail.size ();
+  ok = true;
+  // -- move back through the proof, shrinking the trail and
+  // -- validating the clauses
+  for (int i = proof.size () - 2; i >= 0; i--)
+    {
+      if (verbosity >= 2) fflush (stdout);
+      CRef cr = proof [i];
+      assert (cr != CRef_Undef);
+      Clause &c = ca [cr];
+      
+      //if (verbosity >= 2) printf ("Validating lemma #%d ... ", i);
+
+      // -- resurect deleted clauses
+      if (c.mark () == 1)
+        {
+          // -- undelete
+          c.mark (0);
+          Var x = var (c[0]);
+
+          // -- if non-unit clause, attach it
+          if (c.size () > 1) attachClause (cr);
+          else // -- if unit clause, enqueue it
+            { 
+              bool res = enqueue (c[0], cr);
+              assert (res);
+            }
+          if (verbosity >= 2) printf ("^");
+          continue;
+        }
+
+      assert (c.mark () == 0);
+      // -- detach the clause
+      if (locked (c))
+        {
+          // -- undo the bcp
+          while (trail[trail_sz - 1] != c[0]) 
+            {
+              Var x = var (trail [trail_sz - 1]);
+              assigns [x] = l_Undef;
+              insertVarOrder (x);
+              trail_sz--;
+
+              CRef r = reason (x);
+              assert (r != CRef_Undef);
+              // -- mark literals of core clause as core
+              if (ca [r].core ())
+                {
+                  Clause &rc = ca [r];
+                  for (int j = 1; j < rc.size (); ++j)
+                    {
+                      Var x = var (rc [j]);
+                      ca [reason (x)].core (1);
+                    }
+                }
+            }
+          assert (c[0] == trail [trail_sz - 1]);
+          // -- unassign the variable
+          assigns [var (c[0])] = l_Undef;
+          // -- put it back in order heap in case we want to restart
+          // -- solving in the future
+          insertVarOrder (var (c[0]));
+          trail_sz--;
+        }
+      // -- unit clauses don't need to be detached from watched literals
+      if (c.size () > 1) detachClause (cr);
+      // -- mark clause deleted
+      c.mark (1);
+
+            
+      if (c.core () == 1)
+        {
+          assert (value (c[0]) == l_Undef);
+          // -- put trail in a good state
+          trail.shrink (trail.size () - trail_sz);
+          qhead = trail.size ();
+          trail_lim [0] = trail.size ();
+          if (verbosity >= 2) printf ("V");
+          if (!validateLemma (cr)) return false;
+        }
+      else if (verbosity >= 2) printf ("-");
+
+      
+    }
+  if (verbosity >= 2) printf ("\n");
+
+  // find core clauses in the rest of the trail
+  for (int i = trail.size () - 1; i <= 0; --i)
+    {
+      assert (reason (var (trail [i])) != CRef_Undef);
+      Clause &c = ca [reason (var (trail [i]))];
+      // -- if c is core, mark all clauses it depends as core
+      if (c.core () == 1)
+        for (int j = 1; j < c.size (); ++j)
+          {
+            Var x = var (c[j]);
+            ca[reason (x)].core (1);
+          }
+      
+    }
+
+  if (verbosity >= 1) printf ("VALIDATED\n");
+  return true;
+}
+
+bool Solver::validateLemma (CRef cr)
+{
+  assert (decisionLevel () == 0);
+  assert (ok);
+  
+  Clause &lemma = ca [cr];
+  assert (lemma.core ());
+  assert (!locked (lemma));
+
+  // -- go to decision level 1
+  newDecisionLevel ();
+
+  for (int i = 0; i < lemma.size (); ++i) 
+    enqueue (~lemma [i]);
+  
+  // -- go to decision level 2
+  newDecisionLevel ();
+  
+  CRef confl = propagate ();
+  if (confl == CRef_Undef) 
+    { 
+      if (verbosity >= 2) printf ("FAILED: No Conflict from propagate()\n");
+      return false;
+    }
+  Clause &conflC = ca [confl];
+  conflC.core (1);
+  for (int i = 0; i < conflC.size (); ++i)
+    {
+      Var x = var (conflC [i]);
+      // -- if the variable got value by propagation, 
+      // -- mark it to be unrolled
+      if (level (x) > 1) seen [x] = 1;
+      else if (level (x) <= 0) ca [reason(x)].core (1);
+    }
+
+  for (int i = trail.size () - 1; i >= trail_lim[1]; i--)
+    {
+      Var x = var (trail [i]);
+      if (!seen [x]) continue;
+      
+      seen [x] = 0;
+      assert (reason (x) != CRef_Undef);
+      Clause &c = ca [reason (x)];
+      c.core (1);
+
+      assert (value (c[0]) == l_True);
+      // -- for all other literals in the reason
+      for (int j = 1; j < c.size (); ++j)
+        {
+          Var y = var (c [j]);
+          assert (value (c [j]) == l_False);
+
+          // -- if the literal is assigned at level 2, 
+          // -- mark it for processing
+          if (level (y) > 1) seen [y] = 1;
+          // -- else if the literal is assigned at level 0,
+          // -- mark its reason clause as core
+          else if (level (y) <= 0)
+            // -- mark the reason for y as core
+            ca[reason (y)].core (1);
+        }
+    }
+  // reset
+  cancelUntil (0);
+  ok = true;
+  return true;
+}
+
+void Solver::replay ()
+{
+  assert (log_proof);
+  assert (proof.size () > 0);
+  if (verbosity >= 2) printf ("REPLAYING: ");
+  CRef confl = propagate (true);
+  // -- assume that initial clause database is consistent
+  assert (confl == CRef_Undef);
+
+  for (int i = 0; i < proof.size (); ++i)
+    {
+      if (verbosity >= 2) fflush (stdout);
+      
+      CRef cr = proof [i];
+      assert (cr != CRef_Undef);
+      Clause &c = ca [cr];
+
+      // -- delete clause that was deleted before (except for locked clauses)
+      if (c.mark () == 0 && !locked (c))
+        {
+          if (c.size () > 1) detachClause (cr);
+          c.mark (1);
+          if (verbosity >= 2) printf ("-");
+          continue;
+        }
+      // -- if current clause is not core or already present, continue
+      if (c.core () == 0 || c.mark () == 0) 
+        {
+          if (verbosity >= 2) printf ("-");
+          continue;
+        }
+      
+      
+      if (verbosity >= 2) printf ("v");
+      
+      // -- at least one literal must be undefined
+      assert (value (c[0]) == l_Undef);
+
+      newDecisionLevel (); // decision level 1
+      for (int j = 0; j < c.size (); ++j) enqueue (~c[j]);
+      newDecisionLevel (); // decision level 2
+      CRef p = propagate (true);
+      assert (p != CRef_Undef);
+      // -- XXX Here can run analyze() to rebuild the resolution
+      // -- proof, extract interpolants, etc.
+      // -- trail at decision level 0 is implied by the database
+      // -- trail at decision level 1 are the decision forced by the clause
+      // -- trail at decision level 2 is derived from level 1
+
+      // undo
+      cancelUntil (0);
+      
+      // -- undelete the clause and attach it to the database
+      c.mark (0);
+      // -- if unit clause, add to trail and propagate
+      if (c.size () <= 1 || value (c[1]) == l_False) 
+        {
+          uncheckedEnqueue (c[0], cr);
+          confl = propagate (true);
+          // -- if got a conflict at level 0, bail out
+          if (confl != CRef_Undef) break;
+
+        }
+      else attachClause (cr);
+    }
+
+  if (verbosity >= 2)
+    {
+      printf ("\n");
+      fflush (stdout);
+    }
+ 
+  if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
+}
+
+
 //=================================================================================================
 // Minor methods:
 
@@ -151,7 +424,19 @@ bool Solver::addClause_(vec<Lit>& ps)
     if (ps.size() == 0)
         return ok = false;
     else if (ps.size() == 1){
+      if (log_proof)
+        {
+          CRef cr = ca.alloc (ps, false);            
+          Clause &c = ca[cr];
+          c.part ().join (currentPart);
+          clauses.push (cr);
+          uncheckedEnqueue (ps[0], cr);
+        }
+      else
         uncheckedEnqueue(ps[0]);
+      
+      // -- mark variable of the unit literal as shared if needed
+      partInfo [var (ps[0])].join (currentPart);
         return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
@@ -197,12 +482,13 @@ void Solver::detachClause(CRef cr, bool strict) {
 
 
 void Solver::removeClause(CRef cr) {
+    if (log_proof) proof.push (cr);
     Clause& c = ca[cr];
-    detachClause(cr);
+    if (c.size () > 1) detachClause(cr);
     // Don't leave pointers to free'd memory!
-    if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
+    if (locked(c) && !log_proof) vardata[var(c[0])].reason = CRef_Undef;
     c.mark(1); 
-    ca.free(cr);
+    if (!log_proof) ca.free(cr);
 }
 
 
@@ -317,6 +603,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
     int i, j;
     out_learnt.copyTo(analyze_toclear);
     if (ccmin_mode == 2){
+      assert (!log_proof);
         uint32_t abstract_level = 0;
         for (i = 1; i < out_learnt.size(); i++)
             abstract_level |= abstractLevel(var(out_learnt[i])); // (maintain an abstraction of levels involved in conflict)
@@ -326,6 +613,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
                 out_learnt[j++] = out_learnt[i];
         
     }else if (ccmin_mode == 1){
+      assert (!log_proof);
         for (i = j = 1; i < out_learnt.size(); i++){
             Var x = var(out_learnt[i]);
 
@@ -443,6 +731,9 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
     assigns[var(p)] = lbool(!sign(p));
     vardata[var(p)] = mkVarData(from, decisionLevel());
     trail.push_(p);
+
+    // -- everything at level 0 has a reason
+    assert (!log_proof || decisionLevel () != 0 || from != CRef_Undef);
 }
 
 
@@ -457,7 +748,7 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 |    Post-conditions:
 |      * the propagation queue is empty, even if there was a conflict.
 |________________________________________________________________________________________________@*/
-CRef Solver::propagate()
+CRef Solver::propagate(bool coreOnly)
 {
     CRef    confl     = CRef_Undef;
     int     num_props = 0;
@@ -478,6 +769,9 @@ CRef Solver::propagate()
             // Make sure the false literal is data[1]:
             CRef     cr        = i->cref;
             Clause&  c         = ca[cr];
+
+            if (coreOnly && !c.core ()) { *j++ = *i++; continue; }
+
             Lit      false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
@@ -635,16 +929,29 @@ lbool Solver::search(int nof_conflicts)
         if (confl != CRef_Undef){
             // CONFLICT
             conflicts++; conflictC++;
-            if (decisionLevel() == 0) return l_False;
+            if (decisionLevel() == 0) 
+              {
+                if (log_proof) proof.push (confl);
+                return l_False;
+              }
 
             learnt_clause.clear();
             analyze(confl, learnt_clause, backtrack_level);
             cancelUntil(backtrack_level);
 
             if (learnt_clause.size() == 1){
+              if (log_proof)
+                {
+                  // Need to log learned unit clauses in the proof
+                  CRef cr = ca.alloc (learnt_clause, true);
+                  proof.push (cr);
+                  uncheckedEnqueue (learnt_clause [0], cr);                  
+                }
+              else
                 uncheckedEnqueue(learnt_clause[0]);
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
+                if (log_proof) proof.push (cr);
                 learnts.push(cr);
                 attachClause(cr);
                 claBumpActivity(ca[cr]);
@@ -913,6 +1220,11 @@ void Solver::relocAll(ClauseAllocator& to)
     for (int i = 0; i < learnts.size(); i++)
         ca.reloc(learnts[i], to);
 
+    // Clausal proof:
+    //
+    for (int i = 0; i < proof.size (); i++)
+      ca.reloc (proof[i], to);
+
     // All original:
     //
     for (int i = 0; i < clauses.size(); i++)
@@ -922,6 +1234,7 @@ void Solver::relocAll(ClauseAllocator& to)
 
 void Solver::garbageCollect()
 {
+  assert (!log_proof);
     // Initialize the next region to a size corresponding to the estimated utilization degree. This
     // is not precise but should avoid some unnecessary reallocations for the new region:
     ClauseAllocator to(ca.size() - ca.wasted()); 
