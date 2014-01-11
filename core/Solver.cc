@@ -43,6 +43,8 @@ static IntOption     opt_restart_first     (_cat, "rfirst",      "The base resta
 static DoubleOption  opt_restart_inc       (_cat, "rinc",        "Restart interval increase factor", 2, DoubleRange(1, false, HUGE_VAL, false));
 static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  HUGE_VAL, DoubleRange(0, false, HUGE_VAL, false));
 
+static BoolOption    opt_valid          (_cat, "valid",    "Validate UNSAT answers", false);
+
 
 //=================================================================================================
 // Constructor/Destructor:
@@ -53,6 +55,7 @@ Solver::Solver() :
     // Parameters (user settable):
     //
     verbosity        (0)
+  , log_proof (opt_valid)
   , var_decay        (opt_var_decay)
   , clause_decay     (opt_clause_decay)
   , random_var_freq  (opt_random_var_freq)
@@ -151,7 +154,19 @@ bool Solver::addClause_(vec<Lit>& ps)
     if (ps.size() == 0)
         return ok = false;
     else if (ps.size() == 1){
+      if (log_proof)
+        {
+          CRef cr = ca.alloc (ps, false);            
+          Clause &c = ca[cr];
+          c.part ().join (currentPart);
+          clauses.push (cr);
+          uncheckedEnqueue (ps[0], cr);
+        }
+      else
         uncheckedEnqueue(ps[0]);
+      
+      // -- mark variable of the unit literal as shared if needed
+      partInfo [var (ps[0])].join (currentPart);
         return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
@@ -197,12 +212,13 @@ void Solver::detachClause(CRef cr, bool strict) {
 
 
 void Solver::removeClause(CRef cr) {
+    if (log_proof) proof.push (cr);
     Clause& c = ca[cr];
-    detachClause(cr);
+    if (c.size () > 1) detachClause(cr);
     // Don't leave pointers to free'd memory!
-    if (locked(c)) vardata[var(c[0])].reason = CRef_Undef;
+    if (locked(c) && !log_proof) vardata[var(c[0])].reason = CRef_Undef;
     c.mark(1); 
-    ca.free(cr);
+    if (!log_proof) ca.free(cr);
 }
 
 
@@ -317,6 +333,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
     int i, j;
     out_learnt.copyTo(analyze_toclear);
     if (ccmin_mode == 2){
+      assert (!log_proof);
         uint32_t abstract_level = 0;
         for (i = 1; i < out_learnt.size(); i++)
             abstract_level |= abstractLevel(var(out_learnt[i])); // (maintain an abstraction of levels involved in conflict)
@@ -326,6 +343,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
                 out_learnt[j++] = out_learnt[i];
         
     }else if (ccmin_mode == 1){
+      assert (!log_proof);
         for (i = j = 1; i < out_learnt.size(); i++){
             Var x = var(out_learnt[i]);
 
@@ -443,6 +461,9 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
     assigns[var(p)] = lbool(!sign(p));
     vardata[var(p)] = mkVarData(from, decisionLevel());
     trail.push_(p);
+
+    // -- everything at level 0 has a reason
+    assert (!log_proof || decisionLevel () != 0 || from != CRef_Undef);
 }
 
 
@@ -635,16 +656,29 @@ lbool Solver::search(int nof_conflicts)
         if (confl != CRef_Undef){
             // CONFLICT
             conflicts++; conflictC++;
-            if (decisionLevel() == 0) return l_False;
+            if (decisionLevel() == 0) 
+              {
+                if (log_proof) proof.push (confl);
+                return l_False;
+              }
 
             learnt_clause.clear();
             analyze(confl, learnt_clause, backtrack_level);
             cancelUntil(backtrack_level);
 
             if (learnt_clause.size() == 1){
+              if (log_proof)
+                {
+                  // Need to log learned unit clauses in the proof
+                  CRef cr = ca.alloc (learnt_clause, true);
+                  proof.push (cr);
+                  uncheckedEnqueue (learnt_clause [0], cr);                  
+                }
+              else
                 uncheckedEnqueue(learnt_clause[0]);
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
+                if (log_proof) proof.push (cr);
                 learnts.push(cr);
                 attachClause(cr);
                 claBumpActivity(ca[cr]);
@@ -913,6 +947,11 @@ void Solver::relocAll(ClauseAllocator& to)
     for (int i = 0; i < learnts.size(); i++)
         ca.reloc(learnts[i], to);
 
+    // Clausal proof:
+    //
+    for (int i = 0; i < proof.size (); i++)
+      ca.reloc (proof[i], to);
+
     // All original:
     //
     for (int i = 0; i < clauses.size(); i++)
@@ -922,6 +961,7 @@ void Solver::relocAll(ClauseAllocator& to)
 
 void Solver::garbageCollect()
 {
+  assert (!log_proof);
     // Initialize the next region to a size corresponding to the estimated utilization degree. This
     // is not precise but should avoid some unnecessary reallocations for the new region:
     ClauseAllocator to(ca.size() - ca.wasted()); 

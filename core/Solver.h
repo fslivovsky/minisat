@@ -114,6 +114,7 @@ public:
     // Mode of operation:
     //
     int       verbosity;
+    bool      log_proof; // Enable proof logging
     double    var_decay;
     double    clause_decay;
     double    random_var_freq;
@@ -175,6 +176,7 @@ protected:
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
     vec<CRef>           clauses;          // List of problem clauses.
     vec<CRef>           learnts;          // List of learnt clauses.
+    vec<CRef>           proof;            // Clausal proof
     double              cla_inc;          // Amount to bump next clause with.
     vec<double>         activity;         // A heuristic measurement of the activity of a variable.
     double              var_inc;          // Amount to bump next variable with.
