@@ -302,6 +302,81 @@ bool Solver::validateLemma (CRef cr)
   return true;
 }
 
+void Solver::replay ()
+{
+  assert (log_proof);
+  assert (proof.size () > 0);
+  if (verbosity >= 2) printf ("REPLAYING: ");
+  CRef confl = propagate (true);
+  // -- assume that initial clause database is consistent
+  assert (confl == CRef_Undef);
+
+  for (int i = 0; i < proof.size (); ++i)
+    {
+      if (verbosity >= 2) fflush (stdout);
+      
+      CRef cr = proof [i];
+      assert (cr != CRef_Undef);
+      Clause &c = ca [cr];
+
+      // -- delete clause that was deleted before (except for locked clauses)
+      if (c.mark () == 0 && !locked (c))
+        {
+          if (c.size () > 1) detachClause (cr);
+          c.mark (1);
+          if (verbosity >= 2) printf ("-");
+          continue;
+        }
+      // -- if current clause is not core or already present, continue
+      if (c.core () == 0 || c.mark () == 0) 
+        {
+          if (verbosity >= 2) printf ("-");
+          continue;
+        }
+      
+      
+      if (verbosity >= 2) printf ("v");
+      
+      // -- at least one literal must be undefined
+      assert (value (c[0]) == l_Undef);
+
+      newDecisionLevel (); // decision level 1
+      for (int j = 0; j < c.size (); ++j) enqueue (~c[j]);
+      newDecisionLevel (); // decision level 2
+      CRef p = propagate (true);
+      assert (p != CRef_Undef);
+      // -- XXX Here can run analyze() to rebuild the resolution
+      // -- proof, extract interpolants, etc.
+      // -- trail at decision level 0 is implied by the database
+      // -- trail at decision level 1 are the decision forced by the clause
+      // -- trail at decision level 2 is derived from level 1
+
+      // undo
+      cancelUntil (0);
+      
+      // -- undelete the clause and attach it to the database
+      c.mark (0);
+      // -- if unit clause, add to trail and propagate
+      if (c.size () <= 1 || value (c[1]) == l_False) 
+        {
+          uncheckedEnqueue (c[0], cr);
+          confl = propagate (true);
+          // -- if got a conflict at level 0, bail out
+          if (confl != CRef_Undef) break;
+
+        }
+      else attachClause (cr);
+    }
+
+  if (verbosity >= 2)
+    {
+      printf ("\n");
+      fflush (stdout);
+    }
+ 
+  if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
+}
+
 
 //=================================================================================================
 // Minor methods:
@@ -673,7 +748,7 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 |    Post-conditions:
 |      * the propagation queue is empty, even if there was a conflict.
 |________________________________________________________________________________________________@*/
-CRef Solver::propagate()
+CRef Solver::propagate(bool coreOnly)
 {
     CRef    confl     = CRef_Undef;
     int     num_props = 0;
@@ -694,6 +769,9 @@ CRef Solver::propagate()
             // Make sure the false literal is data[1]:
             CRef     cr        = i->cref;
             Clause&  c         = ca[cr];
+
+            if (coreOnly && !c.core ()) { *j++ = *i++; continue; }
+
             Lit      false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
