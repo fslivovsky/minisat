@@ -415,16 +415,52 @@ bool Solver::addClause_(vec<Lit>& ps)
     // Check if clause is satisfied and remove false/duplicate literals:
     sort(ps);
     Lit p; int i, j;
-    for (i = j = 0, p = lit_Undef; i < ps.size(); i++)
-        if (value(ps[i]) == l_True || ps[i] == ~p)
+    if (log_proof)
+      {
+        // -- remove duplicates
+        for (i = j = 0, p = lit_Undef; i < ps.size(); i++)
+          if (value(ps[i]) == l_True || ps[i] == ~p)
             return true;
-        else if (value(ps[i]) != l_False && ps[i] != p)
+          else if (ps[i] != p)
             ps[j++] = p = ps[i];
-    ps.shrink(i - j);
-
+        ps.shrink(i - j);
+        
+        // -- move false literals to the end
+        int sz = ps.size ();
+        for (i = 0; i < sz; ++i)
+          {
+            if (value (ps [i]) == l_False)
+              {
+                // -- push current literal to the end
+                Lit l = ps[i];
+                ps[i] = ps[sz-1];
+                ps[sz-1] = l;
+                sz--;
+                i--;
+              }
+          }
+      }
+    else
+      {
+        // -- AG: original minisat code
+        for (i = j = 0, p = lit_Undef; i < ps.size(); i++)
+          if (value(ps[i]) == l_True || ps[i] == ~p)
+            return true;
+          else if (value(ps[i]) != l_False && ps[i] != p)
+            ps[j++] = p = ps[i];
+        ps.shrink(i - j);
+      }
+    
     if (ps.size() == 0)
         return ok = false;
-    else if (ps.size() == 1){
+    else if (log_proof && value (ps[0]) == l_False)
+      {
+        // -- this is the conflict clause, log it as the last clause in the proof
+        CRef cr = ca.alloc (ps, false);
+        proof.push (cr);
+        return ok = false;
+      }
+    else if (ps.size() == 1 || (log_proof && value (ps[1]) == l_False)){
       if (log_proof)
         {
           CRef cr = ca.alloc (ps, false);            
@@ -436,9 +472,10 @@ bool Solver::addClause_(vec<Lit>& ps)
       else
         uncheckedEnqueue(ps[0]);
       
-      // -- mark variable of the unit literal as shared if needed
-      partInfo [var (ps[0])].join (currentPart);
-        return ok = (propagate() == CRef_Undef);
+      // -- mark variables as shared if necessary
+      for (int i = 0; i < ps.size (); ++i)
+        partInfo [var (ps[i])].join (currentPart);
+      return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
         clauses.push(cr);
