@@ -631,7 +631,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel,
                   else
                     out_learnt.push(q);
                 }
-              else
+              else if (log_proof)
                 {
                   assert (!trail_part[var (q)].undef ());
                   // update part based on partition of var(q) 
