@@ -127,6 +127,7 @@ class Range
   Range (unsigned p) : part (p), offset (0) {}
 
   bool undef () { return part == part_Undef; }
+  void reset () { part = part_Undef; offset = 0; }
   
   void join (unsigned np)    
   { 

@@ -401,6 +401,7 @@ Var Solver::newVar(bool sign, bool dvar)
     setDecisionVar(v, dvar);
 
     partInfo.push(Range ());
+    trail_part.push (Range ());
 
     return v;
 }
@@ -558,7 +559,8 @@ Lit Solver::pickBranchLit()
 |        rest of literals. There may be others from the same level though.
 |  
 |________________________________________________________________________________________________@*/
-void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
+void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel, 
+                     Range &part)
 {
     int pathC = 0;
     Lit p     = lit_Undef;
@@ -568,23 +570,36 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel)
     out_learnt.push();      // (leave room for the asserting literal)
     int index   = trail.size() - 1;
 
+    if (log_proof) part = ca [confl].part ();
+    
     do{
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause& c = ca[confl];
-
+        
+        if (log_proof) part.join (c.part ());
+        
         if (c.learnt())
             claBumpActivity(c);
 
         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
             Lit q = c[j];
 
-            if (!seen[var(q)] && level(var(q)) > 0){
-                varBumpActivity(var(q));
-                seen[var(q)] = 1;
-                if (level(var(q)) >= decisionLevel())
+            if (!seen[var(q)]){
+              if (level(var(q)) > 0)
+                {
+                  varBumpActivity(var(q));
+                  seen[var(q)] = 1;
+                  if (level(var(q)) >= decisionLevel())
                     pathC++;
-                else
+                  else
                     out_learnt.push(q);
+                }
+              else
+                {
+                  assert (!trail_part[var (q)].undef ());
+                  // update part based on partition of var(q) 
+                  part.join (trail_part [var (q)]); 
+                }
             }
         }
         
@@ -734,6 +749,19 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 
     // -- everything at level 0 has a reason
     assert (!log_proof || decisionLevel () != 0 || from != CRef_Undef);
+
+    if (log_proof && decisionLevel () == 0)
+      {
+        Clause &c = ca[from];
+        Var x = var (p);
+        
+        assert (!c.part ().undef ());
+        
+        trail_part [x] = c.part ();
+        for (int i = 1; i < c.size (); ++i)
+          trail_part [x].join (ca [reason (var (c[i]))].part ());
+      }
+    
 }
 
 
@@ -922,6 +950,7 @@ lbool Solver::search(int nof_conflicts)
     int         backtrack_level;
     int         conflictC = 0;
     vec<Lit>    learnt_clause;
+    Range       part;
     starts++;
 
     for (;;){
@@ -936,7 +965,7 @@ lbool Solver::search(int nof_conflicts)
               }
 
             learnt_clause.clear();
-            analyze(confl, learnt_clause, backtrack_level);
+            analyze(confl, learnt_clause, backtrack_level, part);
             cancelUntil(backtrack_level);
 
             if (learnt_clause.size() == 1){
@@ -945,6 +974,7 @@ lbool Solver::search(int nof_conflicts)
                   // Need to log learned unit clauses in the proof
                   CRef cr = ca.alloc (learnt_clause, true);
                   proof.push (cr);
+                  ca[cr].part (part);
                   uncheckedEnqueue (learnt_clause [0], cr);                  
                 }
               else
@@ -952,6 +982,7 @@ lbool Solver::search(int nof_conflicts)
             }else{
                 CRef cr = ca.alloc(learnt_clause, true);
                 if (log_proof) proof.push (cr);
+                if (log_proof) ca[cr].part (part);
                 learnts.push(cr);
                 attachClause(cr);
                 claBumpActivity(ca[cr]);
