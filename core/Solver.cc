@@ -216,7 +216,7 @@ bool Solver::validate ()
   if (verbosity >= 2) printf ("\n");
 
   // find core clauses in the rest of the trail
-  for (int i = trail.size () - 1; i <= 0; --i)
+  for (int i = trail.size () - 1; i >= 0; --i)
     {
       assert (reason (var (trail [i])) != CRef_Undef);
       Clause &c = ca [reason (var (trail [i]))];
