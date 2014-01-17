@@ -78,12 +78,13 @@ public:
 
     // Proof validation / traversal
     bool    validate ();  // validates clausal proof
-    void    replay (); // replays clausal proof AFTER validation
+    void    replay (ProofVisitor& v); // replays clausal proof AFTER validation
 
     bool    proofLogging () { return log_proof;}
     void    proofLogging (bool v) { log_proof = v;}
     
     void labelLevel0(ProofVisitor& v, int start);
+    void traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
 
     // Variable mode:
     // 

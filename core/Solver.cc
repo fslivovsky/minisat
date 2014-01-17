@@ -303,7 +303,7 @@ bool Solver::validateLemma (CRef cr)
   return true;
 }
 
-void Solver::replay ()
+void Solver::replay (ProofVisitor& v)
 {
   assert (log_proof);
   assert (proof.size () > 0);
@@ -352,6 +352,9 @@ void Solver::replay ()
       // -- trail at decision level 1 are the decision forced by the clause
       // -- trail at decision level 2 is derived from level 1
 
+      // Traverse the proof
+      traverseProof(v, cr, p);
+
       // undo
       cancelUntil (0);
       
@@ -376,6 +379,48 @@ void Solver::replay ()
     }
  
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
+}
+
+void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
+{
+    // The clause with which we resolve.
+    const Clause& proof = ca[proofClause];
+
+    // The conflict clause
+    const Clause& conflC = ca[confl];
+
+    // Mark all as seen?
+    for (int i = 0; i < conflC.size (); ++i)
+    {
+        Var x = var (conflC [i]);
+        seen[x] = 1;
+    }
+
+    v.hyperClauses.clear();
+    v.hyperChildren.clear();
+    // Now walk up the trail.
+    for (int i = trail.size () - 1; i >= trail_lim[1]; i--) // -- Shouldn't it be 0?
+    {
+        Var x = var (trail [i]);
+        if (!seen [x]) continue;
+
+        seen [x] = 0;
+
+        // --The pivot variable is x.
+
+        assert (reason (x) != CRef_Undef);
+
+        v.hyperChildren.push(x);
+        v.hyperClauses.push(reason(x));
+
+        Clause &r = ca [reason (x)];
+
+        assert (value (r[0]) == l_True);
+        // -- for all other literals in the reason
+        for (int j = 1; j < r.size (); ++j)
+            seen [var (r [j])] = 1;
+    }
+    v.visitHyperResolvent(proofClause);
 }
 
 void Solver::labelLevel0(ProofVisitor& v, int start)
