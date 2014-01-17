@@ -217,7 +217,7 @@ bool Solver::validate ()
   if (verbosity >= 2) printf ("\n");
 
   // find core clauses in the rest of the trail
-  for (int i = trail.size () - 1; i <= 0; --i)
+  for (int i = trail.size () - 1; i >= 0; --i)
     {
       assert (reason (var (trail [i])) != CRef_Undef);
       Clause &c = ca [reason (var (trail [i]))];
@@ -687,7 +687,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel,
                   else
                     out_learnt.push(q);
                 }
-              else
+              else if (log_proof)
                 {
                   assert (!trail_part[var (q)].undef ());
                   // update part based on partition of var(q) 
