@@ -30,6 +30,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 namespace Minisat {
 
+class ProofVisitor;
+
 //=================================================================================================
 // Solver -- the main class:
 
@@ -81,6 +83,8 @@ public:
     bool    proofLogging () { return log_proof;}
     void    proofLogging (bool v) { log_proof = v;}
     
+    void labelLevel0(ProofVisitor& v, int start);
+
     // Variable mode:
     // 
     void    setPolarity    (Var v, bool b); // Declare which polarity the decision heuristic should use for a variable. Requires mode 'polarity_user'.
