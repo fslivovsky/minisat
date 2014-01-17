@@ -22,6 +22,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "mtl/Sort.h"
 #include "core/Solver.h"
+#include "core/ProofVisitor.h"
 
 using namespace Minisat;
 
@@ -377,6 +378,61 @@ void Solver::replay ()
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
 }
 
+void Solver::labelLevel0(ProofVisitor& v, int start)
+{
+    // -- Walk the trail forward
+    vec<Lit> lits;
+    for (int i = start; i < trail_lim[1]; i++)
+    {
+        lits.clear();
+        Var x = var(trail[i]);
+        if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1)
+        {
+            // Labeling function according to shared symbols.
+            if (ca[reason(x)].size() == 1) {
+                Clause& c = ca[reason(x)];
+                lits.push(c[0]);
+            }
+            else
+                lits.push(trail[i]);
+
+            int itp = v.visitLeaf(i, lits);
+            v.setVarItp(x, itp);
+            continue;
+        }
+
+        // x is the pivot.
+
+        Clause& c = ca[reason(x)];
+        int size = c.size();
+
+        if (!v.itpExists(reason(x)))
+        {
+            for (int i=0; i < size; i++)
+                lits.push(c[i]);
+            v.visitLeaf(reason(x), lits);
+        }
+
+        // -- The number of resolution steps at this point is size-1
+        // -- where size is the number of literals in the reason clause
+        // -- for the unit that is currently on the trail.
+        if (size == 2)
+        {
+            // -- Binary resolution
+            v.visitResolvent(x, var(c[1]), reason(x));
+        }
+        else
+        {
+            v.hyperChildren.clear();
+            // -- The first literal (0) is the result of resolution, start from 1.
+            for (int i=1; i < size; i++)
+            {
+                v.hyperChildren.push(var(c[i]));
+            }
+            v.visitHyperResolvent(x);
+        }
+    }
+}
 
 //=================================================================================================
 // Minor methods:
