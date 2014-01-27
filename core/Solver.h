@@ -151,8 +151,10 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
-    void setCurrentPart(unsigned n) { currentPart = n; }
-    unsigned getCurrentPart () { return currentPart; }
+    void setCurrentPart(unsigned n)     { currentPart = n; }
+    unsigned getCurrentPart ()          { return currentPart; }
+
+    Range getVarRange(Var v) const      { assert(partInfo.size() < v); return partInfo[v]; }
     
     
 
