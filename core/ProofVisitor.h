@@ -17,21 +17,21 @@ namespace Minisat {
 class ProofVisitor
 {
 public:
-    virtual int visitResolvent (CRef parent, Var resolvent, CRef p1, CRef p2) { return 0; }
-    virtual int visitResolvent (Var resolvent, Var p1, CRef p2)               { return 0; }
-    virtual int visitHyperResolvent (Var parent)                              { return 0; }
-    virtual int visitHyperResolvent (CRef parent)                             { return 0; }
-    virtual int visitLeaf      (CRef cls, const vec<Lit>& lits)               { return 0; }
-    virtual int visitLeaf      (Var v, const vec<Lit>& lits)                  { return 0; }
+    virtual int visitResolvent      (CRef parent, Var resolvent, CRef p1, CRef p2) { return 0; }
+    virtual int visitResolvent      (Var resolvent, Var p1, CRef p2)               { return 0; }
+    virtual int visitHyperResolvent (Var parent)                                   { return 0; }
+    virtual int visitHyperResolvent (CRef parent)                                  { return 0; }
+    virtual int visitLeaf           (CRef cls, const vec<Lit>& lits)               { return 0; }
+    virtual int visitLeaf           (Var v, const vec<Lit>& lits)                  { return 0; }
 
     // -- Utility
-    bool itpExists(CRef c)             { return clauseToItp.has(c); }
+    bool itpExists(CRef c)             { int x; return clauseToItp.has(c, x); }
     void setVarItp(Var x, int itp)     { if (itpForVar.size() <= toInt(x)) itpForVar.growTo(toInt(x)+1); itpForVar[x] = itp; }
 
-    vec<Var>       hyperChildren;
-    vec<CRef>      hyperClauses;
-    vec<int>       itpForVar;   // -- Itp labeling on the trail
-    Map<CRef, int> clauseToItp; // -- Clause to its Itp labeling
+    vec<Var>  hyperChildren;
+    vec<CRef> hyperClauses;
+    vec<int>  itpForVar;   // -- Itp labeling on the trail
+    CMap<int> clauseToItp; // -- Clause to its Itp labeling
 };
 
 }
