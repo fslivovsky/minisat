@@ -434,12 +434,8 @@ void Solver::labelLevel0(ProofVisitor& v, int start)
         if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1)
         {
             // Labeling function according to shared symbols.
-            if (ca[reason(x)].size() == 1) {
-                Clause& c = ca[reason(x)];
-                lits.push(c[0]);
-            }
-            else
-                lits.push(trail[i]);
+            Clause& c = ca[reason(x)];
+            lits.push(c[0]);
 
             int itp = v.visitLeaf(i, lits);
             v.setVarItp(x, itp);
