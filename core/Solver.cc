@@ -312,6 +312,8 @@ void Solver::replay (ProofVisitor& v)
   // -- assume that initial clause database is consistent
   assert (confl == CRef_Undef);
 
+  labelLevel0(v);
+
   for (int i = 0; i < proof.size (); ++i)
     {
       if (verbosity >= 2) fflush (stdout);
@@ -368,6 +370,8 @@ void Solver::replay (ProofVisitor& v)
           // -- if got a conflict at level 0, bail out
           if (confl != CRef_Undef) break;
 
+          labelLevel0(v);
+
         }
       else attachClause (cr);
     }
@@ -423,7 +427,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     v.visitHyperResolvent(proofClause);
 }
 
-void Solver::labelLevel0(ProofVisitor& v, int start)
+void Solver::labelLevel0(ProofVisitor& v)
 {
     // -- Walk the trail forward
     vec<Lit> lits;
@@ -437,8 +441,7 @@ void Solver::labelLevel0(ProofVisitor& v, int start)
             Clause& c = ca[reason(x)];
             lits.push(c[0]);
 
-            int itp = v.visitLeaf(i, lits);
-            v.setVarItp(x, itp);
+            v.visitLeaf(i, lits);
             continue;
         }
 
@@ -473,6 +476,7 @@ void Solver::labelLevel0(ProofVisitor& v, int start)
             v.visitHyperResolvent(x);
         }
     }
+    start = trail_lim[1];
 }
 
 //=================================================================================================

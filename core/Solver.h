@@ -83,7 +83,8 @@ public:
     bool    proofLogging () { return log_proof;}
     void    proofLogging (bool v) { log_proof = v;}
     
-    void labelLevel0(ProofVisitor& v, int start);
+    int start;
+    void labelLevel0(ProofVisitor& v);
     void traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
 
     // Variable mode:

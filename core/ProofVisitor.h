@@ -17,6 +17,9 @@ namespace Minisat {
 class ProofVisitor
 {
 public:
+    ProofVisitor()              : seqSize(1)    {}
+    ProofVisitor(unsigned size) : seqSize(size) {}
+
     virtual int visitResolvent      (CRef parent, Var resolvent, CRef p1, CRef p2) { return 0; }
     virtual int visitResolvent      (Var resolvent, Var p1, CRef p2)               { return 0; }
     virtual int visitHyperResolvent (Var parent)                                   { return 0; }
@@ -25,13 +28,13 @@ public:
     virtual int visitLeaf           (Var v, const vec<Lit>& lits)                  { return 0; }
 
     // -- Utility
-    bool itpExists(CRef c)             { int x; return clauseToItp.has(c, x); }
-    void setVarItp(Var x, int itp)     { if (itpForVar.size() <= toInt(x)) itpForVar.growTo(toInt(x)+1); itpForVar[x] = itp; }
+    virtual bool itpExists(CRef c) {return true;}
 
-    vec<Var>  hyperChildren;
-    vec<CRef> hyperClauses;
-    vec<int>  itpForVar;   // -- Itp labeling on the trail
-    CMap<int> clauseToItp; // -- Clause to its Itp labeling
+    unsigned        seqSize;        // -- ItpSeq size, always greater than 0.
+    vec<Var>        hyperChildren;
+    vec<CRef>       hyperClauses;
+    vec<vec<int> >  itpForVar;      // -- Itp labeling on the trail
+    vec<CMap<int> > clauseToItp;    // -- Clause to its Itp labeling
 };
 
 }
