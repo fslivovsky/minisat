@@ -367,11 +367,9 @@ void Solver::replay (ProofVisitor& v)
         {
           uncheckedEnqueue (c[0], cr);
           confl = propagate (true);
+          labelLevel0(v);
           // -- if got a conflict at level 0, bail out
           if (confl != CRef_Undef) break;
-
-          labelLevel0(v);
-
         }
       else attachClause (cr);
     }
