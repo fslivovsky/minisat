@@ -187,7 +187,7 @@ void SimpSolver::removeClause(CRef cr)
 }
 
 
-bool SimpSolver::strengthenClause(CRef cr, Lit l)
+bool SimpSolver::strengthenClause_(CRef cr, Lit l)
 {
     Clause& c = ca[cr];
     assert(decisionLevel() == 0);
@@ -209,7 +209,46 @@ bool SimpSolver::strengthenClause(CRef cr, Lit l)
         updateElimHeap(var(l));
     }
 
+    /// AG: need to place conflict clause returned from propagate into the proof
     return c.size() == 1 ? enqueue(c[0]) && propagate() == CRef_Undef : true;
+}
+
+bool SimpSolver::strengthenClause (CRef cr, Lit l)
+{
+  Clause& c = ca[cr];
+  assert(decisionLevel() == 0);
+  assert(use_simplification);
+
+  // FIX: this is too inefficient but would be nice to have (properly implemented)
+  // if (!find(subsumption_queue, &c))
+  subsumption_queue.insert(cr);
+
+  CRef ncr = ca.alloc (c, c.learnt ());
+  ca[ncr].mark (c.mark ());
+  ca[ncr].core (c.core ());
+  ca[ncr].part (c.part ());
+  
+  if (c.size() == 2){
+    detachClause (cr, true);
+    c.strengthen(l);
+  }else{
+    detachClause(cr, true);
+    c.strengthen(l);
+    attachClause(cr);
+  }
+  remove(occurs[var(l)], cr);
+  n_occ[toInt(l)]--;
+  updateElimHeap(var(l));
+
+  ca[ncr].mark (1);
+  proof.push (cr); // this only works is cr is only in the proof once!
+  proof.push (ncr);
+
+  if (c.size () > 1) return true;
+  enqueue (c[0], cr);
+  CRef confl = propagate ();
+  if (confl != CRef_Undef) proof.push (confl);
+  return confl == CRef_Undef;
 }
 
 
@@ -376,6 +415,8 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
                 else if (l != lit_Error){
                     deleted_literals++;
 
+                    // AG: the result of strengthenClause is a new clause that replaced cs[j]
+                    // AG: partition of new clause is cs[j].part ().join (c.part ())
                     if (!strengthenClause(cs[j], ~l))
                         return false;
 
@@ -408,6 +449,11 @@ bool SimpSolver::asymm(Var v, CRef cr)
     if (propagate() != CRef_Undef){
         cancelUntil(0);
         asymm_lits++;
+        /// AG: the result of strengthenClause is the new clause added to the proof
+        /// AG: the new clause does not replace anything
+        /// AG: partition of the new clause depends on analyzing propagate
+        /// AG: simple solution is to set partition of new clause to the widest range
+        /// AG: and let interpolation/validation figure out how the clause was derived
         if (!strengthenClause(cr, l))
             return false;
     }else
@@ -514,6 +560,7 @@ bool SimpSolver::eliminateVar(Var v)
     vec<Lit>& resolvent = add_tmp;
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
+          // merged clause is join of partitions of pos[i] and neg[j]
             if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && !addClause_(resolvent))
                 return false;
 
@@ -528,6 +575,7 @@ bool SimpSolver::eliminateVar(Var v)
 }
 
 
+// AG: Dead function. Ignore.
 bool SimpSolver::substitute(Var v, Lit x)
 {
     assert(!frozen[v]);
@@ -550,6 +598,8 @@ bool SimpSolver::substitute(Var v, Lit x)
             subst_clause.push(var(p) == v ? x ^ sign(p) : p);
         }
 
+        // AG: this call never happens because the enclosing function is never called
+        // AG: (we update proof in removeClause)
         removeClause(cls[i]);
 
         if (!addClause_(subst_clause))
