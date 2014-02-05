@@ -408,13 +408,11 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     // The conflict clause
     const Clause& conflC = ca[confl];
 
-    int pathC = 0;
-    // Mark all as seen?
+    int pathC = conflC.size ();
     for (int i = 0; i < conflC.size (); ++i)
     {
         Var x = var (conflC [i]);
         seen[x] = 1;
-        pathC++;
     }
 
     v.hyperClauses.clear();
@@ -422,7 +420,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
     v.hyperClauses.push(confl);
     // Now walk up the trail.
-    for (int i = trail.size () - 1; pathC > 0; i--) // -- Shouldn't it be 0?
+    for (int i = trail.size () - 1; pathC > 0; i--)
     {
         assert (i >= 0);
         Var x = var (trail [i]);
@@ -430,6 +428,8 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
         seen [x] = 0;
         pathC--;
+
+        if (level(x) == 1) continue;
 
         // --The pivot variable is x.
 
@@ -447,8 +447,11 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         // -- for all other literals in the reason
         for (int j = 1; j < r.size (); ++j)
         {
-            seen [var (r [j])] = 1;
-            pathC++;
+            if (seen [var (r [j])] == 0)
+            {
+                seen [var (r [j])] = 1;
+                pathC++;
+            }
         }
     }
     v.visitHyperResolvent(proofClause);
