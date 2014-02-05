@@ -86,6 +86,7 @@ public:
     int start;
     void labelLevel0(ProofVisitor& v);
     void traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
+    void labelFinal(ProofVisitor& v, CRef proofClause);
 
     // Variable mode:
     // 

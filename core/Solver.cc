@@ -383,6 +383,23 @@ void Solver::replay (ProofVisitor& v)
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
 }
 
+void Solver::labelFinal(ProofVisitor& v, CRef confl)
+{
+    // The conflict clause is the clause with which we resolve.
+    const Clause& source = ca[confl];
+
+    v.hyperChildren.clear();
+
+    // The clause is false, and results in the empty clause,
+    // all are therefore seen and resolved.
+    for (int i = 0; i < source.size (); ++i)
+    {
+        Var x = var (source [i]);
+        v.hyperChildren.push(x);
+    }
+    v.visitHyperResolvent(CRef_Undef);
+}
+
 void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 {
     // The clause with which we resolve.
@@ -422,6 +439,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         for (int j = 1; j < r.size (); ++j)
             seen [var (r [j])] = 1;
     }
+    for (int v = 0; nVars(); v++) seen[v] = 0;
     v.visitHyperResolvent(proofClause);
 }
 
