@@ -437,9 +437,9 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         assert (value (r[0]) == l_True);
         // -- for all other literals in the reason
         for (int j = 1; j < r.size (); ++j)
-            seen [var (r [j])] = 1;
+            if (level(var (r [j])) > 0)
+                seen [var (r [j])] = 1;
     }
-    for (int v = 0; nVars(); v++) seen[v] = 0;
     v.visitHyperResolvent(proofClause);
 }
 
