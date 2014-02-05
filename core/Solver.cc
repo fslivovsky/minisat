@@ -429,21 +429,30 @@ void Solver::labelLevel0(ProofVisitor& v)
 {
     // -- Walk the trail forward
     vec<Lit> lits;
-    for (int i = start; i < trail_lim[1]; i++)
+    int size = trail.size() - 1;
+    for (int i = start; i < size; i++)
     {
         lits.clear();
         Var x = var(trail[i]);
         if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1)
         {
             // Labeling function according to shared symbols.
+            assert(reason(x) != CRef_Undef); // -- XXX But, what about assumptions?
             Clause& c = ca[reason(x)];
-            lits.push(c[0]);
-
-            v.visitLeaf(i, lits);
+            if (c.learnt() == false)
+            {
+                lits.push(c[0]);
+                v.visitLeaf(i, lits);
+            }
+            else
+            {
+                // A unit clause may be a learned clause, in which case
+                // the proof should be logged and interpolant should already
+                // exist
+                assert (v.itpExists(reason(x)));
+            }
             continue;
         }
-
-        // x is the pivot.
 
         Clause& c = ca[reason(x)];
         int size = c.size();
@@ -474,7 +483,7 @@ void Solver::labelLevel0(ProofVisitor& v)
             v.visitHyperResolvent(x);
         }
     }
-    start = trail_lim[1];
+    start = size;
 }
 
 //=================================================================================================
