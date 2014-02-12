@@ -86,7 +86,7 @@ public:
     int start;
     void labelLevel0(ProofVisitor& v);
     void traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
-    void labelFinal(ProofVisitor& v, CRef proofClause);
+    void labelFinal(ProofVisitor& v, CRef confl);
 
     // Variable mode:
     // 
@@ -156,7 +156,7 @@ public:
     void setCurrentPart(unsigned n)     { currentPart = n; }
     unsigned getCurrentPart ()          { return currentPart; }
 
-    Range getVarRange(Var v) const      { assert(partInfo.size() < v); return partInfo[v]; }
+    Range getVarRange(Var v) const      { assert(partInfo.size() > v); return partInfo[v]; }
     
     
 

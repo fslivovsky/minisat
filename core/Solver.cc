@@ -44,7 +44,7 @@ static IntOption     opt_restart_first     (_cat, "rfirst",      "The base resta
 static DoubleOption  opt_restart_inc       (_cat, "rinc",        "Restart interval increase factor", 2, DoubleRange(1, false, HUGE_VAL, false));
 static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  HUGE_VAL, DoubleRange(0, false, HUGE_VAL, false));
 
-static BoolOption    opt_valid          (_cat, "valid",    "Validate UNSAT answers", false);
+static BoolOption    opt_valid             (_cat, "valid",    "Validate UNSAT answers", true);
 
 
 //=================================================================================================
@@ -101,6 +101,7 @@ Solver::Solver() :
   , propagation_budget (-1)
   , asynch_interrupt   (false)
   , currentPart (1)
+  , start(0)
 {}
 
 
@@ -369,7 +370,11 @@ void Solver::replay (ProofVisitor& v)
           confl = propagate (true);
           labelLevel0(v);
           // -- if got a conflict at level 0, bail out
-          if (confl != CRef_Undef) break;
+          if (confl != CRef_Undef)
+          {
+        	  labelFinal(v, confl);
+        	  break;
+          }
         }
       else attachClause (cr);
     }
@@ -388,15 +393,24 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     // The conflict clause is the clause with which we resolve.
     const Clause& source = ca[confl];
 
+    v.hyperClauses.clear();
     v.hyperChildren.clear();
 
+    v.hyperClauses.push(confl);
     // The clause is false, and results in the empty clause,
     // all are therefore seen and resolved.
+    vec<Lit> lits;
     for (int i = 0; i < source.size (); ++i)
     {
+    	lits.push(source[i]);
         Var x = var (source [i]);
         v.hyperChildren.push(x);
     }
+    if (v.itpExists(confl) == false)
+	{
+		assert(source.learnt() == false);
+		v.visitLeaf(confl, lits);
+	}
     v.visitHyperResolvent(CRef_Undef);
 }
 
@@ -407,6 +421,14 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
     // The conflict clause
     const Clause& conflC = ca[confl];
+    if (v.itpExists(confl) == false)
+    {
+    	assert(conflC.learnt() == false);
+    	vec<Lit> lits;
+    	for (int i=0; i < conflC.size(); i++)
+			lits.push(conflC[i]);
+    	v.visitLeaf(confl, lits);
+    }
 
     int pathC = conflC.size ();
     for (int i = 0; i < conflC.size (); ++i)
@@ -437,7 +459,20 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
         v.hyperChildren.push(x);
         if (level(x) > 0)
-            v.hyperClauses.push(reason(x));
+        {
+        	CRef r = reason(x);
+        	if (v.itpExists(r) == false)
+			{
+        		const Clause& c = ca[r];
+				assert(c.learnt() == false);
+				vec<Lit> lits;
+				for (int i=0; i < c.size(); i++)
+					lits.push(c[i]);
+				v.visitLeaf(r, lits);
+			}
+
+            v.hyperClauses.push(r);
+        }
         else
             continue;
 
@@ -474,7 +509,7 @@ void Solver::labelLevel0(ProofVisitor& v)
             if (c.learnt() == false)
             {
                 lits.push(c[0]);
-                v.visitLeaf(i, lits);
+                v.visitLeaf(x, reason(x), lits);
             }
             else
             {
