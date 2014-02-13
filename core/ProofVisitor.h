@@ -25,10 +25,23 @@ public:
     virtual int visitHyperResolvent (Var parent)                                   { return 0; }
     virtual int visitHyperResolvent (CRef parent)                                  { return 0; }
     virtual int visitLeaf           (CRef cls, const vec<Lit>& lits)               { return 0; }
-    virtual int visitLeaf           (Var v, CRef cls, const vec<Lit>& lits)                  { return 0; }
+    virtual int visitLeaf           (Var v, CRef cls, const vec<Lit>& lits)        { return 0; }
 
     // -- Utility
     virtual bool itpExists(CRef c) {return true;}
+
+    void setItpForUnit(Var v, CRef c)
+    {
+    	for (int i=0; i < seqSize; i++)
+    	{
+    		int label;
+    		bool res = clauseToItp[i].has(c, label);
+    		assert(res == true);
+
+    		if (itpForVar[i].size() <= v) itpForVar[i].growTo(v+1, -1);
+    		itpForVar[i][v] = label;
+    	}
+    }
 
     unsigned        seqSize;        // -- ItpSeq size, always greater than 0.
     vec<Var>        hyperChildren;

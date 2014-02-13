@@ -497,7 +497,7 @@ void Solver::labelLevel0(ProofVisitor& v)
     // -- Walk the trail forward
     vec<Lit> lits;
     int size = trail.size() - 1;
-    for (int i = start; i < size; i++)
+    for (int i = start; i <= size; i++)
     {
         lits.clear();
         Var x = var(trail[i]);
@@ -517,6 +517,7 @@ void Solver::labelLevel0(ProofVisitor& v)
                 // the proof should be logged and interpolant should already
                 // exist
                 assert (v.itpExists(reason(x)));
+                v.setItpForUnit(x, reason(x));
             }
             continue;
         }
@@ -541,7 +542,10 @@ void Solver::labelLevel0(ProofVisitor& v)
         }
         else
         {
+        	v.hyperClauses.clear();
             v.hyperChildren.clear();
+
+            v.hyperClauses.push(reason(x));
             // -- The first literal (0) is the result of resolution, start from 1.
             for (int i=1; i < size; i++)
             {
