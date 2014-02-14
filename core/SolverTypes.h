@@ -235,7 +235,8 @@ public:
     Lit          subsumes    (const Clause& other) const;
     void         strengthen  (Lit p);
 
-  Range&       part () { return partition; }
+  Range&       part () 				 { return partition; }
+  const Range& part () const 		 { return partition; }
   void         part (const Range &v) { partition = v; }
 };
 
