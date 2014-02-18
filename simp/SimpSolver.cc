@@ -209,12 +209,12 @@ bool SimpSolver::strengthenClause_(CRef cr, Lit l)
         updateElimHeap(var(l));
     }
 
-    /// AG: need to place conflict clause returned from propagate into the proof
     return c.size() == 1 ? enqueue(c[0]) && propagate() == CRef_Undef : true;
 }
 
 bool SimpSolver::strengthenClause (CRef cr, Lit l)
 {
+  /// AG: unfinished...
   Clause& c = ca[cr];
   assert(decisionLevel() == 0);
   assert(use_simplification);
@@ -223,11 +223,13 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   // if (!find(subsumption_queue, &c))
   subsumption_queue.insert(cr);
 
+  // -- Allocate new clause
   CRef ncr = ca.alloc (c, c.learnt ());
   ca[ncr].mark (c.mark ());
   ca[ncr].core (c.core ());
   ca[ncr].part (c.part ());
   
+  // -- modify c
   if (c.size() == 2){
     detachClause (cr, true);
     c.strengthen(l);
@@ -240,13 +242,26 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   n_occ[toInt(l)]--;
   updateElimHeap(var(l));
 
+  // -- mark new clause as deleted and place it in the proof to replace modified 'c'
   ca[ncr].mark (1);
-  proof.push (cr); // this only works is cr is only in the proof once!
+  // -- this only works is cr is only in the proof once!
+  proof.push (cr); // -- AG: problem line
   proof.push (ncr);
+  // -- at this point, the clausal proof is of the form (ncr :: cr ::
+  // -- rest) where ncr is marked as deleted, and cr as inserted. If
+  // -- cr is strengthened again then the copy of cr in the proof must
+  // -- be duplicated and replace.
+
+  // -- solution is to keep a map M of type CMap : CRef -> unsigned,
+  // -- such that M[cr] == i IFF proof[i] == cr. Then, if M[cr] is
+  // -- defined, before stregthenClause(cr) is called, cr is duped and
+  // -- proof [M[cr]] = dup (cr)
 
   if (c.size () > 1) return true;
+  // -- if new clause is a unit, propagate and bail out with a conflict
   enqueue (c[0], cr);
   CRef confl = propagate ();
+  // -- conflict must be logged for a proper clausal proof
   if (confl != CRef_Undef) proof.push (confl);
   return confl == CRef_Undef;
 }
@@ -553,16 +568,17 @@ bool SimpSolver::eliminateVar(Var v)
         mkElimClause(elimclauses, ~mkLit(v));
     }
 
-    for (int i = 0; i < cls.size(); i++)
-        removeClause(cls[i]); 
-
     // Produce clauses in cross product:
     vec<Lit>& resolvent = add_tmp;
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
           // merged clause is join of partitions of pos[i] and neg[j]
+          // AG: partition of the resolvent is join of partitions of pos[i] and neg[j]
             if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && !addClause_(resolvent))
                 return false;
+
+    for (int i = 0; i < cls.size(); i++)
+        removeClause(cls[i]); 
 
     // Free occurs list for this variable:
     occurs[v].clear(true);
