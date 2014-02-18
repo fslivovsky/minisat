@@ -18,17 +18,30 @@ class ProofVisitor
 {
 public:
     ProofVisitor()              : seqSize(1)    {}
-    ProofVisitor(unsigned size) : seqSize(size) {}
+    ProofVisitor(unsigned size) : seqSize(size), itpForVar(size), clauseToItp(size) {}
 
     virtual int visitResolvent      (CRef parent, Var resolvent, CRef p1, CRef p2) { return 0; }
     virtual int visitResolvent      (Var resolvent, Var p1, CRef p2)               { return 0; }
     virtual int visitHyperResolvent (Var parent)                                   { return 0; }
     virtual int visitHyperResolvent (CRef parent)                                  { return 0; }
     virtual int visitLeaf           (CRef cls, const vec<Lit>& lits)               { return 0; }
-    virtual int visitLeaf           (Var v, const vec<Lit>& lits)                  { return 0; }
+    virtual int visitLeaf           (Var v, CRef cls, const vec<Lit>& lits)        { return 0; }
 
     // -- Utility
     virtual bool itpExists(CRef c) {return true;}
+
+    void setItpForUnit(Var v, CRef c)
+    {
+    	for (int i=0; i < seqSize; i++)
+    	{
+    		int label;
+    		bool res = clauseToItp[i].has(c, label);
+    		assert(res == true);
+
+    		if (itpForVar[i].size() <= v) itpForVar[i].growTo(v+1, -1);
+    		itpForVar[i][v] = label;
+    	}
+    }
 
     unsigned        seqSize;        // -- ItpSeq size, always greater than 0.
     vec<Var>        hyperChildren;
