@@ -260,7 +260,6 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
 
   if (proofLogging ())
   {
-
     // -- mark new clause as deleted and place it in the proof to replace modified 'c'
     ca[ncr].mark (1);
     // -- log insertion of 'new' c
@@ -449,6 +448,9 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
                     if (!strengthenClause(cs[j], ~l))
                         return false;
 
+                    if (proofLogging ()) ca [cs [j]].part ().join (c.part ());
+                    
+
                     // Did current candidate get deleted from cs? Then check candidate at index j again:
                     if (var(l) == best)
                         j--;
@@ -485,6 +487,11 @@ bool SimpSolver::asymm(Var v, CRef cr)
         /// AG: and let interpolation/validation figure out how the clause was derived
         if (!strengthenClause(cr, l))
             return false;
+        if (proofLogging ())
+        {
+          ca [cr].part ().join (1);
+          ca [cr].part ().join (currentPart);
+        }
     }else
         cancelUntil(0);
 
