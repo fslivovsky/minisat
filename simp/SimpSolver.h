@@ -136,6 +136,10 @@ class SimpSolver : public Solver {
     vec<char>           eliminated;
     int                 bwdsub_assigns;
     int                 n_touched;
+  
+  // -- proof logging related
+  // -- maps a cref to its location in the clausal proof
+  CMap<unsigned> proofLoc;
 
     // Temporaries:
     //
