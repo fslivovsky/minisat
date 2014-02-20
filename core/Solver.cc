@@ -207,7 +207,7 @@ bool Solver::validate ()
           // -- put trail in a good state
           trail.shrink (trail.size () - trail_sz);
           qhead = trail.size ();
-          trail_lim [0] = trail.size ();
+          if (trail_lim.size () > 0) trail_lim [0] = trail.size ();
           if (verbosity >= 2) printf ("V");
           if (!validateLemma (cr)) return false;
         }
@@ -221,7 +221,7 @@ bool Solver::validate ()
   // update trail and qhead
   trail.shrink (trail.size () - trail_sz);
   qhead = trail.size ();
-  trail_lim [0] = trail.size ();
+  if (trail_lim.size () > 0) trail_lim [0] = trail.size ();
 
   // find core clauses in the rest of the trail
   for (int i = trail.size () - 1; i >= 0; --i)
