@@ -187,34 +187,33 @@ void SimpSolver::removeClause(CRef cr)
 }
 
 
-bool SimpSolver::strengthenClause_(CRef cr, Lit l)
-{
-    Clause& c = ca[cr];
-    assert(decisionLevel() == 0);
-    assert(use_simplification);
+// bool SimpSolver::strengthenClause_(CRef cr, Lit l)
+// {
+//     Clause& c = ca[cr];
+//     assert(decisionLevel() == 0);
+//     assert(use_simplification);
 
-    // FIX: this is too inefficient but would be nice to have (properly implemented)
-    // if (!find(subsumption_queue, &c))
-    subsumption_queue.insert(cr);
+//     // FIX: this is too inefficient but would be nice to have (properly implemented)
+//     // if (!find(subsumption_queue, &c))
+//     subsumption_queue.insert(cr);
 
-    if (c.size() == 2){
-        removeClause(cr);
-        c.strengthen(l);
-    }else{
-        detachClause(cr, true);
-        c.strengthen(l);
-        attachClause(cr);
-        remove(occurs[var(l)], cr);
-        n_occ[toInt(l)]--;
-        updateElimHeap(var(l));
-    }
+//     if (c.size() == 2){
+//         removeClause(cr);
+//         c.strengthen(l);
+//     }else{
+//         detachClause(cr, true);
+//         c.strengthen(l);
+//         attachClause(cr);
+//         remove(occurs[var(l)], cr);
+//         n_occ[toInt(l)]--;
+//         updateElimHeap(var(l));
+//     }
 
-    return c.size() == 1 ? enqueue(c[0]) && propagate() == CRef_Undef : true;
-}
+//     return c.size() == 1 ? enqueue(c[0]) && propagate() == CRef_Undef : true;
+// }
 
 bool SimpSolver::strengthenClause (CRef cr, Lit l)
 {
-  /// AG: unfinished...
   Clause& c = ca[cr];
   assert(decisionLevel() == 0);
   assert(use_simplification);
