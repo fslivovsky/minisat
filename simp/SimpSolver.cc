@@ -154,6 +154,7 @@ bool SimpSolver::addClause_(vec<Lit>& ps, Range part)
         // -- AG: in proof logging mode unit clauses are put into clause db
         // -- AG: but, they should be ignored by the simplifier
         if (proofLogging () && c.size () <= 1) return true;
+        if (proofLogging () && value (c[1]) == l_False) return true;
 
         // NOTE: the clause is added to the queue immediately and then
         // again during 'gatherTouchedClauses()'. If nothing happens
