@@ -1471,16 +1471,18 @@ void Solver::relocAll(ClauseAllocator& to)
     for (int i = 0; i < learnts.size(); i++)
         ca.reloc(learnts[i], to);
 
-    // Clausal proof:
-    //
-    for (int i = 0; i < proof.size (); i++)
-      ca.reloc (proof[i], to);
-
     // All original:
     //
     for (int i = 0; i < clauses.size(); i++)
         ca.reloc(clauses[i], to);
+
+    // Clausal proof:
+    //
+    for (int i = 0; i < proof.size (); i++)
+      ca.reloc (proof[i], to);
 }
+
+
 
 
 void Solver::garbageCollect()
