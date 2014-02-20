@@ -219,7 +219,6 @@ void SimpSolver::removeClause(CRef cr)
 
 bool SimpSolver::strengthenClause (CRef cr, Lit l)
 {
-  Clause& c = ca[cr];
   assert(decisionLevel() == 0);
   assert(use_simplification);
 
@@ -234,10 +233,13 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   {
     // -- Create a duplicate of c
     // -- Since c is changed in-place
-    ncr = ca.alloc (c, c.learnt ());
-    ca[ncr].mark (c.mark ());
-    ca[ncr].core (c.core ());
-    ca[ncr].part (c.part ());
+    add_tmp.clear ();
+    for (int i = 0; i < ca[cr].size (); ++i)
+      add_tmp.push (ca[cr][i]);
+    ncr = ca.alloc (add_tmp, ca[cr].learnt ());
+    ca[ncr].mark (ca[cr].mark ());
+    ca[ncr].core (ca[cr].core ());
+    ca[ncr].part (ca[cr].part ());
 
     // -- if 'c' is already in the proof, replace it 
     // -- in there by the duplicate
@@ -249,6 +251,8 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
       proofLoc.remove (cr);
     }
   }
+  
+  Clause &c = ca[cr];
   
   // -- modify c
   if (c.size() == 2){
@@ -438,29 +442,33 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
         CRef*       cs = (CRef*)_cs;
 
         for (int j = 0; j < _cs.size(); j++)
-            if (c.mark())
-                break;
-            else if (!ca[cs[j]].mark() &&  cs[j] != cr && (subsumption_lim == -1 || ca[cs[j]].size() < subsumption_lim)){
-                Lit l = c.subsumes(ca[cs[j]]);
+        {
+          Clause &c = ca[cr];
+          if (c.mark())
+            break;
+          else if (!ca[cs[j]].mark() &&  cs[j] != cr && (subsumption_lim == -1 || ca[cs[j]].size() < subsumption_lim)){
+            Lit l = c.subsumes(ca[cs[j]]);
 
-                if (l == lit_Undef)
-                    subsumed++, removeClause(cs[j]);
-                else if (l != lit_Error){
-                    deleted_literals++;
+            if (l == lit_Undef)
+              subsumed++, removeClause(cs[j]);
+            else if (l != lit_Error){
+              deleted_literals++;
 
-                    // AG: the result of strengthenClause is a new clause that replaced cs[j]
-                    // AG: partition of new clause is cs[j].part ().join (c.part ())
-                    if (!strengthenClause(cs[j], ~l))
-                        return false;
+              // AG: the result of strengthenClause is a new clause that replaced cs[j]
+              // AG: partition of new clause is cs[j].part ().join (c.part ())
+              if (!strengthenClause(cs[j], ~l))
+                return false;
 
-                    if (proofLogging ()) ca [cs [j]].part ().join (c.part ());
+              if (proofLogging ()) ca [cs [j]].part ().join (ca[cr].part ());
                     
 
-                    // Did current candidate get deleted from cs? Then check candidate at index j again:
-                    if (var(l) == best)
-                        j--;
-                }
+              // Did current candidate get deleted from cs? Then check candidate at index j again:
+              if (var(l) == best)
+                j--;
             }
+          }
+        }
+        
     }
 
     return true;
