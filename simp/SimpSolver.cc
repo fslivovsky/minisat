@@ -187,7 +187,11 @@ void SimpSolver::removeClause(CRef cr)
             updateElimHeap(var(c[i]));
             occurs.smudge(var(c[i]));
         }
-
+    
+    unsigned loc;
+    if (proofLogging () && proofLoc.has (cr, loc))
+      proofLoc.remove (cr);
+    
     Solver::removeClause(cr);
 }
 
@@ -610,11 +614,17 @@ bool SimpSolver::eliminateVar(Var v)
           Range part;
           part.join (ca [pos [i]].part ());
           part.join (ca [neg [j]].part ());
+          int nclauses = clauses.size ();
           // merged clause is join of partitions of pos[i] and neg[j]
           // AG: partition of the resolvent is join of partitions of pos[i] and neg[j]
           if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && 
               !addClause_(resolvent, part))
                 return false;
+          if (proofLogging () && clauses.size () == nclauses + 1)
+          {
+            proof.push (clauses.last ());
+            proofLoc.insert (clauses.last (), proof.size () - 1);
+          }
         }
     
     for (int i = 0; i < cls.size(); i++)
@@ -634,6 +644,8 @@ bool SimpSolver::eliminateVar(Var v)
 // AG: Dead function. Ignore.
 bool SimpSolver::substitute(Var v, Lit x)
 {
+  assert (!proofLogging ());
+  
     assert(!frozen[v]);
     assert(!isEliminated(v));
     assert(value(v) == l_Undef);
@@ -751,6 +763,7 @@ bool SimpSolver::eliminate(bool turn_off_elim)
         remove_satisfied      = true;
         ca.extra_clause_field = false;
 
+        proofLoc.clear ();
         // Force full cleanup (this is safe and desirable since it only happens once):
         rebuildOrderHeap();
         garbageCollect();
