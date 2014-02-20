@@ -132,7 +132,7 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
 
 
 
-bool SimpSolver::addClause_(vec<Lit>& ps)
+bool SimpSolver::addClause_(vec<Lit>& ps, Range part)
 {
 #ifndef NDEBUG
     for (int i = 0; i < ps.size(); i++)
@@ -144,7 +144,7 @@ bool SimpSolver::addClause_(vec<Lit>& ps)
     if (use_rcheck && implied(ps))
         return true;
 
-    if (!Solver::addClause_(ps))
+    if (!Solver::addClause_(ps, part))
         return false;
 
     if (use_simplification && clauses.size() == nclauses + 1){
@@ -260,6 +260,7 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
 
   if (proofLogging ())
   {
+
     // -- mark new clause as deleted and place it in the proof to replace modified 'c'
     ca[ncr].mark (1);
     // -- log insertion of 'new' c
@@ -585,11 +586,17 @@ bool SimpSolver::eliminateVar(Var v)
     vec<Lit>& resolvent = add_tmp;
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
+        {
+          Range part;
+          part.join (ca [pos [i]].part ());
+          part.join (ca [neg [j]].part ());
           // merged clause is join of partitions of pos[i] and neg[j]
           // AG: partition of the resolvent is join of partitions of pos[i] and neg[j]
-            if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && !addClause_(resolvent))
+          if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && 
+              !addClause_(resolvent, part))
                 return false;
-
+        }
+    
     for (int i = 0; i < cls.size(); i++)
         removeClause(cls[i]); 
 

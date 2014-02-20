@@ -592,7 +592,7 @@ Var Solver::newVar(bool sign, bool dvar)
 }
 
 
-bool Solver::addClause_(vec<Lit>& ps)
+bool Solver::addClause_(vec<Lit>& ps, Range part)
 {
     assert(decisionLevel() == 0);
     if (!ok) return false;
@@ -650,7 +650,7 @@ bool Solver::addClause_(vec<Lit>& ps)
         {
           CRef cr = ca.alloc (ps, false);
           Clause &c = ca[cr];
-          c.part ().join (currentPart);
+          c.part ().join (part);
           clauses.push (cr);
           uncheckedEnqueue (ps[0], cr);
         }
@@ -659,19 +659,17 @@ bool Solver::addClause_(vec<Lit>& ps)
 
       // -- mark variables as shared if necessary
       for (int i = 0; i < ps.size (); ++i)
-        partInfo [var (ps[i])].join (currentPart);
+        partInfo [var (ps[i])].join (part);
       return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
         clauses.push(cr);
         attachClause(cr);
 
-        // Also assuming that clauses are added in order: partition 1 first,
-        // then partition 2, etc...
         Clause& c = ca[cr];
-        c.part ().join (currentPart);
+        c.part ().join (part);
         for (i = 0; i < ps.size(); i++)
-          partInfo[var (ps[i])].join (currentPart);
+          partInfo[var (ps[i])].join (part);
     }
 
     return true;
