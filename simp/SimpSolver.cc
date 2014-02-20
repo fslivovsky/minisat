@@ -223,10 +223,27 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   subsumption_queue.insert(cr);
 
   // -- Allocate new clause
-  CRef ncr = ca.alloc (c, c.learnt ());
-  ca[ncr].mark (c.mark ());
-  ca[ncr].core (c.core ());
-  ca[ncr].part (c.part ());
+  CRef ncr = CRef_Undef;
+
+  if (proofLogging ())
+  {
+    // -- Create a duplicate of c
+    // -- Since c is changed in-place
+    ncr = ca.alloc (c, c.learnt ());
+    ca[ncr].mark (c.mark ());
+    ca[ncr].core (c.core ());
+    ca[ncr].part (c.part ());
+
+    // -- if 'c' is already in the proof, replace it 
+    // -- in there by the duplicate
+    unsigned loc;
+    if (proofLoc.has (cr, loc)) 
+    {
+      proof [loc] = ncr;
+      // -- 'c' is no longer in the proof
+      proofLoc.remove (cr);
+    }
+  }
   
   // -- modify c
   if (c.size() == 2){
@@ -241,20 +258,17 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   n_occ[toInt(l)]--;
   updateElimHeap(var(l));
 
-  // -- mark new clause as deleted and place it in the proof to replace modified 'c'
-  ca[ncr].mark (1);
-  // -- this only works is cr is only in the proof once!
-  proof.push (cr); // -- AG: problem line
-  proof.push (ncr);
-  // -- at this point, the clausal proof is of the form (ncr :: cr ::
-  // -- rest) where ncr is marked as deleted, and cr as inserted. If
-  // -- cr is strengthened again then the copy of cr in the proof must
-  // -- be duplicated and replace.
-
-  // -- solution is to keep a map M of type CMap : CRef -> unsigned,
-  // -- such that M[cr] == i IFF proof[i] == cr. Then, if M[cr] is
-  // -- defined, before stregthenClause(cr) is called, cr is duped and
-  // -- proof [M[cr]] = dup (cr)
+  if (proofLogging ())
+  {
+    // -- mark new clause as deleted and place it in the proof to replace modified 'c'
+    ca[ncr].mark (1);
+    // -- log insertion of 'new' c
+    proof.push (cr); 
+    // mark location of 'c' in the proof
+    proofLoc.insert (cr, proof.size () - 1);
+    // -- log deletion of 'old' c
+    proof.push (ncr);
+  }
 
   if (c.size () > 1) return true;
   // -- if new clause is a unit, propagate and bail out with a conflict
