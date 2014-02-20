@@ -168,6 +168,7 @@ int main(int argc, char** argv)
                 printStats(S);
                 printf("\n"); }
             printf("UNSATISFIABLE\n");
+            if (S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
             exit(20);
         }
 
