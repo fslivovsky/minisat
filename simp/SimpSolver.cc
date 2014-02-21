@@ -200,6 +200,7 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
 {
   assert(decisionLevel() == 0);
   assert(use_simplification);
+  assert (!locked (ca[cr]));
 
   // FIX: this is too inefficient but would be nice to have (properly implemented)
   // if (!find(subsumption_queue, &c))
@@ -459,6 +460,13 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
           if (c.mark())
             break;
           else if (!ca[cs[j]].mark() &&  cs[j] != cr && (subsumption_lim == -1 || ca[cs[j]].size() < subsumption_lim)){
+            
+            if (satisfied (ca[cs[j]]))
+            {
+              removeClause (cs[j]);
+              continue;
+            }
+            
             Lit l = c.subsumes(ca[cs[j]]);
 
             if (l == lit_Undef)
