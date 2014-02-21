@@ -45,6 +45,7 @@ class SimpSolver : public Solver {
     bool    addClause (Lit p);               // Add a unit clause to the solver.
     bool    addClause (Lit p, Lit q);        // Add a binary clause to the solver.
     bool    addClause (Lit p, Lit q, Lit r); // Add a ternary clause to the solver.
+    bool    addClause_ (vec<Lit> &ps, Range part);
     bool    addClause_(      vec<Lit>& ps);
     bool    substitute(Var v, Lit x);  // Replace all occurences of v with x (may cause a contradiction).
 
@@ -136,6 +137,10 @@ class SimpSolver : public Solver {
     vec<char>           eliminated;
     int                 bwdsub_assigns;
     int                 n_touched;
+  
+  // -- proof logging related
+  // -- maps a cref to its location in the clausal proof
+  CMap<unsigned> proofLoc;
 
     // Temporaries:
     //
@@ -173,7 +178,7 @@ inline void SimpSolver::updateElimHeap(Var v) {
     if (elim_heap.inHeap(v) || (!frozen[v] && !isEliminated(v) && value(v) == l_Undef))
         elim_heap.update(v); }
 
-
+inline bool SimpSolver::addClause_ (vec<Lit> &ps) { return addClause_ (ps, Range (currentPart)); }
 inline bool SimpSolver::addClause    (const vec<Lit>& ps)    { ps.copyTo(add_tmp); return addClause_(add_tmp); }
 inline bool SimpSolver::addEmptyClause()                     { add_tmp.clear(); return addClause_(add_tmp); }
 inline bool SimpSolver::addClause    (Lit p)                 { add_tmp.clear(); add_tmp.push(p); return addClause_(add_tmp); }

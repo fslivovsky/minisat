@@ -207,7 +207,7 @@ bool Solver::validate ()
           // -- put trail in a good state
           trail.shrink (trail.size () - trail_sz);
           qhead = trail.size ();
-          trail_lim [0] = trail.size ();
+          if (trail_lim.size () > 0) trail_lim [0] = trail.size ();
           if (verbosity >= 2) printf ("V");
           if (!validateLemma (cr)) return false;
         }
@@ -221,7 +221,7 @@ bool Solver::validate ()
   // update trail and qhead
   trail.shrink (trail.size () - trail_sz);
   qhead = trail.size ();
-  trail_lim [0] = trail.size ();
+  if (trail_lim.size () > 0) trail_lim [0] = trail.size ();
 
   // find core clauses in the rest of the trail
   for (int i = trail.size () - 1; i >= 0; --i)
@@ -592,7 +592,7 @@ Var Solver::newVar(bool sign, bool dvar)
 }
 
 
-bool Solver::addClause_(vec<Lit>& ps)
+bool Solver::addClause_(vec<Lit>& ps, Range part)
 {
     assert(decisionLevel() == 0);
     if (!ok) return false;
@@ -650,7 +650,7 @@ bool Solver::addClause_(vec<Lit>& ps)
         {
           CRef cr = ca.alloc (ps, false);
           Clause &c = ca[cr];
-          c.part ().join (currentPart);
+          c.part ().join (part);
           clauses.push (cr);
           uncheckedEnqueue (ps[0], cr);
         }
@@ -659,19 +659,17 @@ bool Solver::addClause_(vec<Lit>& ps)
 
       // -- mark variables as shared if necessary
       for (int i = 0; i < ps.size (); ++i)
-        partInfo [var (ps[i])].join (currentPart);
+        partInfo [var (ps[i])].join (part);
       return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
         clauses.push(cr);
         attachClause(cr);
 
-        // Also assuming that clauses are added in order: partition 1 first,
-        // then partition 2, etc...
         Clause& c = ca[cr];
-        c.part ().join (currentPart);
+        c.part ().join (part);
         for (i = 0; i < ps.size(); i++)
-          partInfo[var (ps[i])].join (currentPart);
+          partInfo[var (ps[i])].join (part);
     }
 
     return true;
@@ -1473,16 +1471,18 @@ void Solver::relocAll(ClauseAllocator& to)
     for (int i = 0; i < learnts.size(); i++)
         ca.reloc(learnts[i], to);
 
-    // Clausal proof:
-    //
-    for (int i = 0; i < proof.size (); i++)
-      ca.reloc (proof[i], to);
-
     // All original:
     //
     for (int i = 0; i < clauses.size(); i++)
         ca.reloc(clauses[i], to);
+
+    // Clausal proof:
+    //
+    for (int i = 0; i < proof.size (); i++)
+      ca.reloc (proof[i], to);
 }
+
+
 
 
 void Solver::garbageCollect()

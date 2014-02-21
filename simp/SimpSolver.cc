@@ -132,7 +132,7 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
 
 
 
-bool SimpSolver::addClause_(vec<Lit>& ps)
+bool SimpSolver::addClause_(vec<Lit>& ps, Range part)
 {
 #ifndef NDEBUG
     for (int i = 0; i < ps.size(); i++)
@@ -144,12 +144,17 @@ bool SimpSolver::addClause_(vec<Lit>& ps)
     if (use_rcheck && implied(ps))
         return true;
 
-    if (!Solver::addClause_(ps))
+    if (!Solver::addClause_(ps, part))
         return false;
 
     if (use_simplification && clauses.size() == nclauses + 1){
         CRef          cr = clauses.last();
         const Clause& c  = ca[cr];
+
+        // -- AG: in proof logging mode unit clauses are put into clause db
+        // -- AG: but, they should be ignored by the simplifier
+        if (proofLogging () && c.size () <= 1) return true;
+        if (proofLogging () && value (c[1]) == l_False) return true;
 
         // NOTE: the clause is added to the queue immediately and then
         // again during 'gatherTouchedClauses()'. If nothing happens
@@ -182,34 +187,118 @@ void SimpSolver::removeClause(CRef cr)
             updateElimHeap(var(c[i]));
             occurs.smudge(var(c[i]));
         }
-
+    
+    unsigned loc;
+    if (proofLogging () && proofLoc.has (cr, loc))
+      proofLoc.remove (cr);
+    
     Solver::removeClause(cr);
 }
 
 
-bool SimpSolver::strengthenClause(CRef cr, Lit l)
+bool SimpSolver::strengthenClause (CRef cr, Lit l)
 {
-    Clause& c = ca[cr];
-    assert(decisionLevel() == 0);
-    assert(use_simplification);
+  assert(decisionLevel() == 0);
+  assert(use_simplification);
+  assert (!locked (ca[cr]));
 
-    // FIX: this is too inefficient but would be nice to have (properly implemented)
-    // if (!find(subsumption_queue, &c))
-    subsumption_queue.insert(cr);
+  // FIX: this is too inefficient but would be nice to have (properly implemented)
+  // if (!find(subsumption_queue, &c))
+  subsumption_queue.insert(cr);
 
-    if (c.size() == 2){
-        removeClause(cr);
-        c.strengthen(l);
-    }else{
-        detachClause(cr, true);
-        c.strengthen(l);
-        attachClause(cr);
-        remove(occurs[var(l)], cr);
-        n_occ[toInt(l)]--;
-        updateElimHeap(var(l));
+  // -- Allocate new clause
+  CRef ncr = CRef_Undef;
+
+  if (proofLogging ())
+  {
+    // -- Create a duplicate of c
+    // -- Since c is changed in-place
+    add_tmp.clear ();
+    for (int i = 0; i < ca[cr].size (); ++i)
+      add_tmp.push (ca[cr][i]);
+    ncr = ca.alloc (add_tmp, ca[cr].learnt ());
+    ca[ncr].mark (ca[cr].mark ());
+    ca[ncr].core (ca[cr].core ());
+    ca[ncr].part (ca[cr].part ());
+
+    // -- if 'c' is already in the proof, replace it 
+    // -- in there by the duplicate
+    unsigned loc;
+    if (proofLoc.has (cr, loc)) 
+    {
+      proof [loc] = ncr;
+      // -- 'c' is no longer in the proof
+      proofLoc.remove (cr);
     }
+  }
+  
+  Clause &c = ca[cr];
+  
+  // -- modify c
+  if (c.size() == 2){
+    detachClause (cr, true);
+    c.strengthen(l);
+  }else{
+    detachClause(cr, true);
+    c.strengthen(l);
+    
+    // -- if strengthen removed a watched literal, and the new
+    // -- secondary watch is false, check for another literal to watch
+    if (c[1] == add_tmp[2] && value (c[1]) == l_False)
+    {
+      for (int i = 2; i < c.size (); ++i)
+        if (value (c[i]) != l_False)
+        {
+          Lit tmp = c[1];
+          c[1] = c[i], c[i] = tmp;
+          break;
+        }
+    }
+    
+    // ensure that first literal is l_Undef
+    if (value (c[1]) == l_Undef)
+    {
+      Lit tmp = c[1];
+      c[1] = c[0], c[0] = tmp;
+    }
+    
+    attachClause(cr);
+  }
+  remove(occurs[var(l)], cr);
+  n_occ[toInt(l)]--;
+  updateElimHeap(var(l));
 
-    return c.size() == 1 ? enqueue(c[0]) && propagate() == CRef_Undef : true;
+  if (proofLogging ())
+  {
+    // -- mark new clause as deleted and place it in the proof to replace modified 'c'
+    ca[ncr].mark (1);
+    // -- log insertion of 'new' c
+    proof.push (cr); 
+    // mark location of 'c' in the proof
+    proofLoc.insert (cr, proof.size () - 1);
+    // -- log deletion of 'old' c
+    proof.push (ncr);
+  }
+
+  
+  // -- remove a clause if it is satisfied already
+  // XXX something breaks when remove sat unit clauses
+  if ((c.size () > 1 && value (c[0]) == l_True) ||
+      (c.size () > 1 && value (c[1]) == l_True))
+    removeClause (cr);
+  else if (c.size () == 1 || (value (c[0]) == l_Undef && value (c[1]) == l_False))
+  {
+#ifndef NDEBUG
+    for (int i = 2; i < c.size (); ++i) assert (value (c[i]) == l_False);
+#endif
+    // -- if new clause is a unit, propagate and bail out with a conflict
+    enqueue (c[0], cr);
+    CRef confl = propagate ();
+    // -- conflict must be logged for a proper clausal proof
+    if (confl != CRef_Undef) proof.push (confl);
+    return confl == CRef_Undef;
+  }
+  return true;
 }
 
 
@@ -366,24 +455,40 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
         CRef*       cs = (CRef*)_cs;
 
         for (int j = 0; j < _cs.size(); j++)
-            if (c.mark())
-                break;
-            else if (!ca[cs[j]].mark() &&  cs[j] != cr && (subsumption_lim == -1 || ca[cs[j]].size() < subsumption_lim)){
-                Lit l = c.subsumes(ca[cs[j]]);
-
-                if (l == lit_Undef)
-                    subsumed++, removeClause(cs[j]);
-                else if (l != lit_Error){
-                    deleted_literals++;
-
-                    if (!strengthenClause(cs[j], ~l))
-                        return false;
-
-                    // Did current candidate get deleted from cs? Then check candidate at index j again:
-                    if (var(l) == best)
-                        j--;
-                }
+        {
+          Clause &c = ca[cr];
+          if (c.mark())
+            break;
+          else if (!ca[cs[j]].mark() &&  cs[j] != cr && (subsumption_lim == -1 || ca[cs[j]].size() < subsumption_lim)){
+            
+            if (satisfied (ca[cs[j]]))
+            {
+              removeClause (cs[j]);
+              continue;
             }
+            
+            Lit l = c.subsumes(ca[cs[j]]);
+
+            if (l == lit_Undef)
+              subsumed++, removeClause(cs[j]);
+            else if (l != lit_Error){
+              deleted_literals++;
+
+              // AG: the result of strengthenClause is a new clause that replaced cs[j]
+              // AG: partition of new clause is cs[j].part ().join (c.part ())
+              if (!strengthenClause(cs[j], ~l))
+                return false;
+
+              if (proofLogging ()) ca [cs [j]].part ().join (ca[cr].part ());
+                    
+
+              // Did current candidate get deleted from cs? Then check candidate at index j again:
+              if (var(l) == best)
+                j--;
+            }
+          }
+        }
+        
     }
 
     return true;
@@ -408,8 +513,18 @@ bool SimpSolver::asymm(Var v, CRef cr)
     if (propagate() != CRef_Undef){
         cancelUntil(0);
         asymm_lits++;
+        /// AG: the result of strengthenClause is the new clause added to the proof
+        /// AG: the new clause does not replace anything
+        /// AG: partition of the new clause depends on analyzing propagate
+        /// AG: simple solution is to set partition of new clause to the widest range
+        /// AG: and let interpolation/validation figure out how the clause was derived
         if (!strengthenClause(cr, l))
             return false;
+        if (proofLogging ())
+        {
+          ca [cr].part ().join (1);
+          ca [cr].part ().join (currentPart);
+        }
     }else
         cancelUntil(0);
 
@@ -507,15 +622,29 @@ bool SimpSolver::eliminateVar(Var v)
         mkElimClause(elimclauses, ~mkLit(v));
     }
 
-    for (int i = 0; i < cls.size(); i++)
-        removeClause(cls[i]); 
-
     // Produce clauses in cross product:
     vec<Lit>& resolvent = add_tmp;
     for (int i = 0; i < pos.size(); i++)
         for (int j = 0; j < neg.size(); j++)
-            if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && !addClause_(resolvent))
+        {
+          Range part;
+          part.join (ca [pos [i]].part ());
+          part.join (ca [neg [j]].part ());
+          int nclauses = clauses.size ();
+          // merged clause is join of partitions of pos[i] and neg[j]
+          // AG: partition of the resolvent is join of partitions of pos[i] and neg[j]
+          if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && 
+              !addClause_(resolvent, part))
                 return false;
+          if (proofLogging () && clauses.size () == nclauses + 1)
+          {
+            proof.push (clauses.last ());
+            proofLoc.insert (clauses.last (), proof.size () - 1);
+          }
+        }
+    
+    for (int i = 0; i < cls.size(); i++)
+        removeClause(cls[i]); 
 
     // Free occurs list for this variable:
     occurs[v].clear(true);
@@ -528,8 +657,11 @@ bool SimpSolver::eliminateVar(Var v)
 }
 
 
+// AG: Dead function. Ignore.
 bool SimpSolver::substitute(Var v, Lit x)
 {
+  assert (!proofLogging ());
+  
     assert(!frozen[v]);
     assert(!isEliminated(v));
     assert(value(v) == l_Undef);
@@ -550,6 +682,8 @@ bool SimpSolver::substitute(Var v, Lit x)
             subst_clause.push(var(p) == v ? x ^ sign(p) : p);
         }
 
+        // AG: this call never happens because the enclosing function is never called
+        // AG: (we update proof in removeClause)
         removeClause(cls[i]);
 
         if (!addClause_(subst_clause))
@@ -645,6 +779,7 @@ bool SimpSolver::eliminate(bool turn_off_elim)
         remove_satisfied      = true;
         ca.extra_clause_field = false;
 
+        proofLoc.clear ();
         // Force full cleanup (this is safe and desirable since it only happens once):
         rebuildOrderHeap();
         garbageCollect();
