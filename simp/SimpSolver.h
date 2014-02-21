@@ -178,7 +178,7 @@ inline void SimpSolver::updateElimHeap(Var v) {
     if (elim_heap.inHeap(v) || (!frozen[v] && !isEliminated(v) && value(v) == l_Undef))
         elim_heap.update(v); }
 
-inline bool SimpSolver::addClause_ (vec<Lit> &ps) { addClause_ (ps, Range (currentPart)); }
+inline bool SimpSolver::addClause_ (vec<Lit> &ps) { return addClause_ (ps, Range (currentPart)); }
 inline bool SimpSolver::addClause    (const vec<Lit>& ps)    { ps.copyTo(add_tmp); return addClause_(add_tmp); }
 inline bool SimpSolver::addEmptyClause()                     { add_tmp.clear(); return addClause_(add_tmp); }
 inline bool SimpSolver::addClause    (Lit p)                 { add_tmp.clear(); add_tmp.push(p); return addClause_(add_tmp); }
