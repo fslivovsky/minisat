@@ -401,7 +401,7 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     const Clause& source = ca[confl];
 
     v.hyperClauses.clear();
-    v.hyperChildren.clear();
+    v.hyperPivots.clear();
 
     v.hyperClauses.push(confl);
     // The clause is false, and results in the empty clause,
@@ -410,8 +410,7 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     for (int i = 0; i < source.size (); ++i)
     {
     	lits.push(source[i]);
-        Var x = var (source [i]);
-        v.hyperChildren.push(x);
+        v.hyperPivots.push(source [i]);
     }
     v.visitHyperResolvent(CRef_Undef);
 }
@@ -432,7 +431,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     }
 
     v.hyperClauses.clear();
-    v.hyperChildren.clear();
+    v.hyperPivots.clear();
 
     v.hyperClauses.push(confl);
     // Now walk up the trail.
@@ -451,7 +450,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
         assert (reason (x) != CRef_Undef);
 
-        v.hyperChildren.push(x);
+        v.hyperPivots.push(trail [i]);
         if (level(x) > 0)
         {
           CRef r = reason(x);
@@ -496,20 +495,20 @@ void Solver::labelLevel0(ProofVisitor& v)
         if (size == 2)
         {
           // -- Binary resolution
-          v.visitResolvent(x, var(c[1]), reason(x));
+          v.visitResolvent(trail [i], c[1], reason(x));
         }
         else
         {
           v.hyperClauses.clear();
-          v.hyperChildren.clear();
+          v.hyperPivots.clear();
 
           v.hyperClauses.push(reason(x));
           // -- The first literal (0) is the result of resolution, start from 1.
           for (int i=1; i < size; i++)
           {
-            v.hyperChildren.push(var(c[i]));
+            v.hyperPivots.push(c[i]);
           }
-          v.visitHyperResolvent(x);
+          v.visitHyperResolvent(trail[i]);
         }
     }
     start = size;

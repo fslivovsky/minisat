@@ -172,7 +172,7 @@ int main(int argc, char** argv)
         if (ret == l_False && S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
         if (ret == l_False && S.proofLogging ())
         {
-            ProofVisitor v;
+          TraceProofVisitor v(S);
             S.replay (v);
         }
         if (res != NULL){
