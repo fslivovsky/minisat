@@ -4,21 +4,52 @@
 
 namespace Minisat
 {
-  int TraceProofVisitor::visitResolvent (Lit parent, Lit p1, CRef p2)
+  namespace
   {
-    if (!m_units [var (p1)])
+    void toDimacs (Lit lit)
     {
-      m_units [var (p1)] = true;
-      printf ("vL (l%d)\n", toInt (p1));
-    }
-    bool v;
-    if (!m_visited.has (p2, v))
-    {
-      m_visited.insert (p2, true);
-      printf ("vL (c%d)\n", p2);
+      printf ("%s%d", sign (lit) ? "-" : "", var (lit) + 1);
     }
     
-    printf ("vR (l%d, l%d, c%d)\n", toInt (parent), toInt (p1), p2);
+    void toDimacs (const Clause &c)
+    {
+      for (int i = 0; i < c.size (); ++i)
+      {
+        toDimacs (c[i]);
+        printf (" ");
+      }
+    }
+    
+  }
+  
+  int TraceProofVisitor::visitResolvent (Lit parent, Lit p1, CRef p2)
+  {
+    if (m_units [var (p1)] < 0)
+    {
+      m_units [var (p1)] = m_ids++;
+      printf ("%d ", m_ids - 1);
+      toDimacs (p1);
+      printf (" 0 0\n");
+    }
+    int id;
+    if (!m_visited.has (p2, id))
+    {
+      m_visited.insert (p2, m_ids++);
+      printf ("%d ", m_ids - 1);
+      toDimacs (m_Solver.getClause (p2));
+      printf (" 0 0\n");
+    }
+    
+    m_units [var (parent)] = m_ids++;
+    
+    printf ("%d ", m_ids - 1);
+    toDimacs (parent);
+    printf (" 0 ");
+    
+    id = -1;
+    m_visited.has (p2, id);
+    printf ("%d %d 0\n", m_units [var (p1)], id);
+    
     return 0;
   }
 
@@ -27,49 +58,61 @@ namespace Minisat
     doAntecendents ();
     Var vp = var (parent);
     
-    m_units [vp] = true;
-    
-    printf ("vH (l%d 0 ", toInt (parent));
+    m_units [vp] = m_ids++;
+    printf ("%d ", m_ids-1);
+    toDimacs (parent);
+    printf (" 0 ");
 
-    printf ("c%d ", hyperClauses [0]);
+    int id;
+    m_visited.has (hyperClauses [0], id);
+    printf ("%d ", id);
     for (int i = 0; i < hyperPivots.size (); ++i)
     {
       if (i+1 < hyperClauses.size ())
-        printf ("c%d ", hyperClauses [i+1]);
+      {
+        m_visited.has (hyperClauses [i+1], id);
+        printf ("%d ", id);
+      }
       else
-        printf ("l%d ", toInt (hyperPivots[i]));
+        printf ("%d ", m_units [var (hyperPivots [i])]);
     }
-    printf (" 0)\n");
+    printf (" 0\n");
 
     return 0;
   }
 
   void TraceProofVisitor::doAntecendents ()
   {   
-    bool v;
-    if (!m_visited.has (hyperClauses [0], v))
+    int id;
+    if (!m_visited.has (hyperClauses [0], id))
     {
-      m_visited.insert (hyperClauses [0], true);
-      printf ("vL (c%d)\n", hyperClauses [0]);
+      m_visited.insert (hyperClauses [0], m_ids++);
+      printf ("%d ", m_ids-1);
+      toDimacs (m_Solver.getClause (hyperClauses [0]));
+      printf (" 0 0\n");
     }
     
     for (int i = 0; i < hyperPivots.size (); ++i)
     {
       if (i + 1 < hyperClauses.size ())
       {
-        if (!m_visited.has (hyperClauses [i], v))
+        if (!m_visited.has (hyperClauses [i+1], id))
         {
-          m_visited.insert (hyperClauses [i], true);
-          printf ("vL (c%d)\n", hyperClauses [i]);
+          m_visited.insert (hyperClauses [i+1], m_ids++);
+          printf ("%d ", m_ids-1);
+          toDimacs (m_Solver.getClause (hyperClauses [i+1]));
+          printf (" 0 0\n");
         }
       }
       else
       {
         Var vp = var (hyperPivots [i]);
-        if (!m_units [vp])
+        if (m_units [vp] < 0)
         {
-          m_units [vp] = true;
-          printf ("vL (l%d)\n", toInt (hyperPivots [i]));
+          m_units [vp] = m_ids++;
+          printf ("%d ", m_ids-1);
+          toDimacs (hyperPivots [i]);
+          printf (" 0 0\n");
         }
       }
     }
@@ -77,20 +120,30 @@ namespace Minisat
   
   int TraceProofVisitor::visitHyperResolvent (CRef parent)
   {
-    m_visited.insert (parent, true);
     doAntecendents ();
     
-    printf ("vH (c%d 0 ", toInt (parent));
+    if (parent != CRef_Undef)
+      m_visited.insert (parent, m_ids++);
+    else m_ids++;
     
-    printf ("c%d ", hyperClauses [0]);
+    printf ("%d ", m_ids-1);
+    if (parent != CRef_Undef) toDimacs (m_Solver.getClause (parent));
+    printf (" 0 ");
+    
+    int id;
+    m_visited.has (hyperClauses [0], id);
+    printf ("%d ", id);
     for (int i = 0; i < hyperPivots.size (); ++i)
     {
       if (i+1 < hyperClauses.size ())
-        printf ("c%d ", hyperClauses [i+1]);
+      {
+        m_visited.has (hyperClauses [i+1], id);
+        printf ("%d ", id);
+      }
       else
-        printf ("l%d ", toInt (hyperPivots[i]));
+        printf ("%d ", m_units [var (hyperPivots [i])]);
     }
-    printf (" 0)\n");
+    printf (" 0\n");
     return 0;
   }
 }

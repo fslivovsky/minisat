@@ -32,16 +32,17 @@ public:
  {
  protected:
    Solver &m_Solver;
-   CMap<bool> m_visited;
+   CMap<int> m_visited;
 
-   vec<bool> m_units;
-
+   vec<int> m_units;
+   int m_ids;
+   
    void doAntecendents ();
    
  public:
-   TraceProofVisitor (Solver &solver) : m_Solver (solver) 
+   TraceProofVisitor (Solver &solver) : m_Solver (solver), m_ids(1) 
    {
-     m_units.growTo (m_Solver.nVars (), false);
+     m_units.growTo (m_Solver.nVars (), -1);
    }
    
    int visitResolvent (Lit parent, Lit p1, CRef p2);
