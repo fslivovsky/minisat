@@ -21,11 +21,11 @@ public:
     ProofVisitor() {}
 
     virtual int visitResolvent      (Lit parent, Lit p1, CRef p2) { return 0; }
-    virtual int visitHyperResolvent (Lit parent)                  { return 0; }
-    virtual int visitHyperResolvent (CRef parent)                 { return 0; }
+    virtual int visitChainResolvent (Lit parent)                  { return 0; }
+    virtual int visitChainResolvent (CRef parent)                 { return 0; }
 
-    vec<Lit>        hyperPivots;
-    vec<CRef>       hyperClauses;
+    vec<Lit>        chainPivots;
+    vec<CRef>       chainClauses;
 };
 
  class TraceProofVisitor : public ProofVisitor
@@ -46,8 +46,8 @@ public:
    }
    
    int visitResolvent (Lit parent, Lit p1, CRef p2);
-   int visitHyperResolvent (Lit parent);
-   int visitHyperResolvent (CRef parent);
+   int visitChainResolvent (Lit parent);
+   int visitChainResolvent (CRef parent);
  };
 }
 

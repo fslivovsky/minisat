@@ -400,16 +400,16 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     // The conflict clause is the clause with which we resolve.
     const Clause& source = ca[confl];
 
-    v.hyperClauses.clear();
-    v.hyperPivots.clear();
+    v.chainClauses.clear();
+    v.chainPivots.clear();
 
-    v.hyperClauses.push(confl);
+    v.chainClauses.push(confl);
     // The clause is false, and results in the empty clause,
     // all are therefore seen and resolved.
     for (int i = 0; i < source.size (); ++i)
-      v.hyperPivots.push(~source [i]);
+      v.chainPivots.push(~source [i]);
     
-    v.visitHyperResolvent(CRef_Undef);
+    v.visitChainResolvent(CRef_Undef);
 }
 
 void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
@@ -427,10 +427,10 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         seen[x] = 1;
     }
 
-    v.hyperClauses.clear();
-    v.hyperPivots.clear();
+    v.chainClauses.clear();
+    v.chainPivots.clear();
 
-    v.hyperClauses.push(confl);
+    v.chainClauses.push(confl);
     // Now walk up the trail.
     for (int i = trail.size () - 1; pathC > 0; i--)
     {
@@ -447,11 +447,11 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
         assert (reason (x) != CRef_Undef);
 
-        v.hyperPivots.push(trail [i]);
+        v.chainPivots.push(trail [i]);
         if (level(x) > 0)
         {
           CRef r = reason(x);
-          v.hyperClauses.push(r);
+          v.chainClauses.push(r);
         }
         else
             continue;
@@ -469,7 +469,7 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
             }
         }
     }
-    v.visitHyperResolvent(proofClause);
+    v.visitChainResolvent(proofClause);
 }
 
 void Solver::labelLevel0(ProofVisitor& v)
@@ -496,16 +496,16 @@ void Solver::labelLevel0(ProofVisitor& v)
         }
         else
         {
-          v.hyperClauses.clear();
-          v.hyperPivots.clear();
+          v.chainClauses.clear();
+          v.chainPivots.clear();
 
-          v.hyperClauses.push(reason(x));
+          v.chainClauses.push(reason(x));
           // -- The first literal (0) is the result of resolution, start from 1.
           for (int i=1; i < size; i++)
           {
-            v.hyperPivots.push(~c[i]);
+            v.chainPivots.push(~c[i]);
           }
-          v.visitHyperResolvent(trail[i]);
+          v.visitChainResolvent(trail[i]);
         }
     }
     start = size;
