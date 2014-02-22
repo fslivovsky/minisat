@@ -159,6 +159,9 @@ public:
 
     Range getVarRange(Var v) const      { assert(partInfo.size() > v); return partInfo[v]; }
     Range getClsRange(CRef cls) const   { assert(cls != CRef_Undef); return ca[cls].part(); }
+ 	const Clause& getClause(CRef cr) const    {return ca[cr];}
+	CRef			 getReason(Var x) const      {return reason(x);}
+ 
     
     
 

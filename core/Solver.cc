@@ -406,12 +406,9 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     v.hyperClauses.push(confl);
     // The clause is false, and results in the empty clause,
     // all are therefore seen and resolved.
-    vec<Lit> lits;
     for (int i = 0; i < source.size (); ++i)
-    {
-    	lits.push(source[i]);
-        v.hyperPivots.push(source [i]);
-    }
+      v.hyperPivots.push(~source [i]);
+    
     v.visitHyperResolvent(CRef_Undef);
 }
 
@@ -495,7 +492,7 @@ void Solver::labelLevel0(ProofVisitor& v)
         if (size == 2)
         {
           // -- Binary resolution
-          v.visitResolvent(trail [i], c[1], reason(x));
+          v.visitResolvent(trail [i], ~c[1], reason(x));
         }
         else
         {
@@ -506,7 +503,7 @@ void Solver::labelLevel0(ProofVisitor& v)
           // -- The first literal (0) is the result of resolution, start from 1.
           for (int i=1; i < size; i++)
           {
-            v.hyperPivots.push(c[i]);
+            v.hyperPivots.push(~c[i]);
           }
           v.visitHyperResolvent(trail[i]);
         }
