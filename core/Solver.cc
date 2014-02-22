@@ -378,13 +378,14 @@ void Solver::replay (ProofVisitor& v)
           // -- if got a conflict at level 0, bail out
           if (confl != CRef_Undef)
           {
-        	  labelFinal(v, confl);
-        	  break;
+            labelFinal(v, confl);
+            break;
           }
         }
       else attachClause (cr);
     }
 
+  if (proof.size () == 1) labelFinal (v, proof [0]);
   if (verbosity >= 2)
     {
       printf ("\n");
@@ -412,11 +413,6 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
         Var x = var (source [i]);
         v.hyperChildren.push(x);
     }
-    if (v.itpExists(confl) == false)
-	{
-		assert(source.learnt() == false);
-		v.visitLeaf(confl, lits);
-	}
     v.visitHyperResolvent(CRef_Undef);
 }
 
@@ -427,14 +423,6 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
     // The conflict clause
     const Clause& conflC = ca[confl];
-    if (v.itpExists(confl) == false)
-    {
-    	assert(conflC.learnt() == false);
-    	vec<Lit> lits;
-    	for (int i=0; i < conflC.size(); i++)
-			lits.push(conflC[i]);
-    	v.visitLeaf(confl, lits);
-    }
 
     int pathC = conflC.size ();
     for (int i = 0; i < conflC.size (); ++i)
@@ -466,18 +454,8 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         v.hyperChildren.push(x);
         if (level(x) > 0)
         {
-        	CRef r = reason(x);
-        	if (v.itpExists(r) == false)
-			{
-        		const Clause& c = ca[r];
-				assert(c.learnt() == false);
-				vec<Lit> lits;
-				for (int i=0; i < c.size(); i++)
-					lits.push(c[i]);
-				v.visitLeaf(r, lits);
-			}
-
-            v.hyperClauses.push(r);
+          CRef r = reason(x);
+          v.hyperClauses.push(r);
         }
         else
             continue;
@@ -507,57 +485,31 @@ void Solver::labelLevel0(ProofVisitor& v)
     {
         lits.clear();
         Var x = var(trail[i]);
-        if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1)
-        {
-            // Labeling function according to shared symbols.
-            assert(reason(x) != CRef_Undef); // -- XXX But, what about assumptions?
-            Clause& c = ca[reason(x)];
-            if (c.learnt() == false)
-            {
-                lits.push(c[0]);
-                v.visitLeaf(x, reason(x), lits);
-            }
-            else
-            {
-                // A unit clause may be a learned clause, in which case
-                // the proof should be logged and interpolant should already
-                // exist
-                assert (v.itpExists(reason(x)));
-                v.setItpForUnit(x, reason(x));
-            }
-            continue;
-        }
+        if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1) continue;
 
         Clause& c = ca[reason(x)];
         int size = c.size();
-
-        if (!v.itpExists(reason(x)))
-        {
-            for (int i=0; i < size; i++)
-                lits.push(c[i]);
-            v.visitLeaf(reason(x), lits);
-        }
 
         // -- The number of resolution steps at this point is size-1
         // -- where size is the number of literals in the reason clause
         // -- for the unit that is currently on the trail.
         if (size == 2)
         {
-            // -- Binary resolution
-            v.visitResolvent(x, var(c[1]), reason(x));
+          // -- Binary resolution
+          v.visitResolvent(x, var(c[1]), reason(x));
         }
         else
         {
-        	v.hyperClauses.clear();
-            v.hyperChildren.clear();
+          v.hyperClauses.clear();
+          v.hyperChildren.clear();
 
-            v.hyperClauses.push(reason(x));
-            // -- The first literal (0) is the result of resolution, start from 1.
-            for (int i=1; i < size; i++)
-            {
-                v.hyperChildren.push(var(c[i]));
-            }
-            v.visitHyperResolvent(x);
+          v.hyperClauses.push(reason(x));
+          // -- The first literal (0) is the result of resolution, start from 1.
+          for (int i=1; i < size; i++)
+          {
+            v.hyperChildren.push(var(c[i]));
+          }
+          v.visitHyperResolvent(x);
         }
     }
     start = size;

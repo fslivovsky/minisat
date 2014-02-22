@@ -17,39 +17,16 @@ namespace Minisat {
 class ProofVisitor
 {
 public:
-    ProofVisitor()              : seqSize(1)    {}
-    ProofVisitor(unsigned size) : seqSize(size), itpForVar(size), clauseToItp(size) {}
+    ProofVisitor() {}
 
-    virtual int visitResolvent      (CRef parent, Var resolvent, CRef p1, CRef p2) { return 0; }
-    virtual int visitResolvent      (Var resolvent, Var p1, CRef p2)               { return 0; }
-    virtual int visitHyperResolvent (Var parent)                                   { return 0; }
-    virtual int visitHyperResolvent (CRef parent)                                  { return 0; }
-    virtual int visitLeaf           (CRef cls, const vec<Lit>& lits)               { return 0; }
-    virtual int visitLeaf           (Var v, CRef cls, const vec<Lit>& lits)        { return 0; }
+    virtual int visitResolvent      (Var parent, Var p1, CRef p2) { return 0; }
+    virtual int visitHyperResolvent (Var parent)                  { return 0; }
+    virtual int visitHyperResolvent (CRef parent)                 { return 0; }
 
-    // -- Utility
-    virtual bool itpExists(CRef c) {return true;}
-
-    void setItpForUnit(Var v, CRef c)
-    {
-    	for (int i=0; i < seqSize; i++)
-    	{
-    		int label;
-    		bool res = clauseToItp[i].has(c, label);
-    		assert(res == true);
-
-    		if (itpForVar[i].size() <= v) itpForVar[i].growTo(v+1, -1);
-    		itpForVar[i][v] = label;
-    	}
-    }
-
-    unsigned        seqSize;        // -- ItpSeq size, always greater than 0.
     vec<Var>        hyperChildren;
     vec<CRef>       hyperClauses;
-    vec<vec<int> >  itpForVar;      // -- Itp labeling on the trail
-    vec<CMap<int> > clauseToItp;    // -- Clause to its Itp labeling
 };
 
 }
 
-#endif /* PROOF_VISITOR_H_ */
+#endif /* G_PROOF_VISITOR_H_ */
