@@ -786,13 +786,12 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel,
     int i, j;
     out_learnt.copyTo(analyze_toclear);
     if (ccmin_mode == 2){
-      assert (!log_proof);
         uint32_t abstract_level = 0;
         for (i = 1; i < out_learnt.size(); i++)
             abstract_level |= abstractLevel(var(out_learnt[i])); // (maintain an abstraction of levels involved in conflict)
 
         for (i = j = 1; i < out_learnt.size(); i++)
-            if (reason(var(out_learnt[i])) == CRef_Undef || !litRedundant(out_learnt[i], abstract_level))
+          if (reason(var(out_learnt[i])) == CRef_Undef || !litRedundant(out_learnt[i], abstract_level, part))
                 out_learnt[j++] = out_learnt[i];
 
     }else if (ccmin_mode == 1){
@@ -840,17 +839,22 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt, int& out_btlevel,
 
 // Check if 'p' can be removed. 'abstract_levels' is used to abort early if the algorithm is
 // visiting literals at levels that cannot be removed later.
-bool Solver::litRedundant(Lit p, uint32_t abstract_levels)
+bool Solver::litRedundant(Lit p, uint32_t abstract_levels, Range &part)
 {
     analyze_stack.clear(); analyze_stack.push(p);
+    // -- partition of all clauses used in the derivation to replace p
+    Range lPart;
     int top = analyze_toclear.size();
     while (analyze_stack.size() > 0){
         assert(reason(var(analyze_stack.last())) != CRef_Undef);
         Clause& c = ca[reason(var(analyze_stack.last()))]; analyze_stack.pop();
-
+        if (log_proof) lPart.join (c.part ());
+        
         for (int i = 1; i < c.size(); i++){
             Lit p  = c[i];
-            if (!seen[var(p)] && level(var(p)) > 0){
+            if (!seen[var(p)]){
+              if (level (var (p)) > 0)
+              {
                 if (reason(var(p)) != CRef_Undef && (abstractLevel(var(p)) & abstract_levels) != 0){
                     seen[var(p)] = 1;
                     analyze_stack.push(p);
@@ -861,9 +865,18 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels)
                     analyze_toclear.shrink(analyze_toclear.size() - top);
                     return false;
                 }
+              }
+              else if (log_proof)
+              {
+                assert (!trail_part[var (p)].undef ());
+                // update part based on partition of var(q)
+                lPart.join (trail_part [var (p)]);
+              }
             }
         }
     }
+
+    if (log_proof) part.join (lPart);
 
     return true;
 }

@@ -255,7 +255,7 @@ protected:
     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, 
                                Range &part);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
-    bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
+  bool     litRedundant     (Lit p, uint32_t abstract_levels, Range &part);                       // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
     lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
