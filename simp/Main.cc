@@ -29,6 +29,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "utils/Options.h"
 #include "core/Dimacs.h"
 #include "simp/SimpSolver.h"
+#include "core/TraceProofVisitor.h"
 
 using namespace Minisat;
 
@@ -89,7 +90,7 @@ int main(int argc, char** argv)
         StringOption dimacs ("MAIN", "dimacs", "If given, stop after preprocessing and write the result to this file.");
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
-
+        StringOption tcpf ("MAIN", "tcpf", "If given, write proof in trace-check format to this file");
         parseOptions(argc, argv, true);
         
         SimpSolver  S;
@@ -169,6 +170,14 @@ int main(int argc, char** argv)
                 printf("\n"); }
             printf("UNSATISFIABLE\n");
             if (S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
+            if (S.proofLogging () && tcpf)
+            {
+              FILE *f = fopen ((const char*) tcpf, "w");
+              TraceProofVisitor v(S, f);
+              S.replay (v);
+              fclose (f);
+            }
+            
             exit(20);
         }
 
@@ -189,6 +198,14 @@ int main(int argc, char** argv)
             printf("\n"); }
         printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
         if (ret == l_False && S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
+        if (ret == l_False && S.proofLogging () && tcpf)
+        {
+          FILE *f = fopen ((const char*) tcpf, "w");
+          TraceProofVisitor v(S, f);
+          S.replay (v);
+          fclose (f);
+        }
+        
         if (res != NULL){
             if (ret == l_True){
                 fprintf(res, "SAT\n");

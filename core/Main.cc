@@ -28,8 +28,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "utils/Options.h"
 #include "core/Dimacs.h"
 #include "core/Solver.h"
-#include "core/ProofVisitor.h"
-
+#include "core/TraceProofVisitor.h"
 using namespace Minisat;
 
 //=================================================================================================
@@ -88,6 +87,8 @@ int main(int argc, char** argv)
         IntOption    verb   ("MAIN", "verb",   "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
         IntOption    cpu_lim("MAIN", "cpu-lim","Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption    mem_lim("MAIN", "mem-lim","Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
+        
+        StringOption tcpf ("MAIN", "tcpf", "If given, write proof in trace-check format to this file");
         
         parseOptions(argc, argv, true);
 
@@ -170,10 +171,12 @@ int main(int argc, char** argv)
             printf("\n"); }
         printf(ret == l_True ? "SATISFIABLE\n" : ret == l_False ? "UNSATISFIABLE\n" : "INDETERMINATE\n");
         if (ret == l_False && S.proofLogging ()) printf ("%s\n", S.validate () ? "VALID" : "INVALID");
-        if (ret == l_False && S.proofLogging ())
+        if (ret == l_False && S.proofLogging () && tcpf)
         {
-            ProofVisitor v;
-            S.replay (v);
+          FILE *f = fopen ((const char*) tcpf, "w");
+          TraceProofVisitor v(S, f);
+          S.replay (v);
+          fclose (f);
         }
         if (res != NULL){
             if (ret == l_True){
