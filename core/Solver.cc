@@ -590,7 +590,12 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
       {
         // -- this is the conflict clause, log it as the last clause in the proof
         CRef cr = ca.alloc (ps, false);
+        Clause &c = ca[cr];
         proof.push (cr);
+        c.part ().join (currentPart);
+		for (int i = 0; i < ps.size (); ++i)
+			partInfo [var (ps[i])].join (currentPart);
+		proof.push (cr);
         return ok = false;
       }
     else if (ps.size() == 1 || (log_proof && value (ps[1]) == l_False)){
