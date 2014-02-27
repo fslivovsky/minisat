@@ -18,6 +18,7 @@ namespace Minisat {
   {
   public:
     ProofVisitor() {}
+    virtual ~ProofVisitor () {}
 
     virtual int visitResolvent      (Lit parent, Lit p1, CRef p2) { return 0; }
     virtual int visitChainResolvent (Lit parent)                  { return 0; }
