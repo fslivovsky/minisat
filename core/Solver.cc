@@ -592,10 +592,9 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         CRef cr = ca.alloc (ps, false);
         Clause &c = ca[cr];
         proof.push (cr);
-        c.part ().join (currentPart);
+        c.part ().join (part);
 		for (int i = 0; i < ps.size (); ++i)
-			partInfo [var (ps[i])].join (currentPart);
-		proof.push (cr);
+			partInfo [var (ps[i])].join (part);
         return ok = false;
       }
     else if (ps.size() == 1 || (log_proof && value (ps[1]) == l_False)){
