@@ -543,6 +543,8 @@ Var Solver::newVar(bool sign, bool dvar)
 bool Solver::addClause_(vec<Lit>& ps, Range part)
 {
     assert(decisionLevel() == 0);
+    assert (!log_proof || !part.undef ());
+    
     if (!ok) return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
