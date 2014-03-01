@@ -509,8 +509,22 @@ bool SimpSolver::asymm(Var v, CRef cr)
             uncheckedEnqueue(~c[i]);
         else
             l = c[i];
+    trail_lim.push (trail.size ());
+    CRef confl = propagate ();
+    if (confl != CRef_Undef){
+        cancelUntil(1);
+        Clause &conflC = ca[confl];
+        bool allFalse = false;
+        for (int i = 0; allFalse && conflC.size () <= c.size () && i < conflC.size (); ++i)
+          allFalse = allFalse && (value (conflC[i]) == l_False);
 
-    if (propagate() != CRef_Undef){
+        if (allFalse)
+        {
+          removeClause (cr);
+          return true;
+        }
+        
+        
         cancelUntil(0);
         asymm_lits++;
         /// AG: the result of strengthenClause is the new clause added to the proof
