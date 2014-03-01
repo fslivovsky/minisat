@@ -128,7 +128,8 @@ class Range
 
   bool undef () { return part == part_Undef; }
   void reset () { part = part_Undef; offset = 0; }
-  
+  bool singleton () { return offset == 0; }
+    
   void join (unsigned np)    
   { 
     if (undef ()) part = np;
