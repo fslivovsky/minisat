@@ -591,10 +591,10 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         // -- this is the conflict clause, log it as the last clause in the proof
         CRef cr = ca.alloc (ps, false);
         Clause &c = ca[cr];
-        proof.push (cr);
         c.part ().join (part);
-		for (int i = 0; i < ps.size (); ++i)
-			partInfo [var (ps[i])].join (part);
+        proof.push (cr);
+        for (int i = 0; part.singleton () && i < ps.size (); ++i)
+          partInfo [var (ps[i])].join (part);
         return ok = false;
       }
     else if (ps.size() == 1 || (log_proof && value (ps[1]) == l_False)){
@@ -610,18 +610,19 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         uncheckedEnqueue(ps[0]);
 
       // -- mark variables as shared if necessary
-      for (int i = 0; i < ps.size (); ++i)
+      for (int i = 0; part.singleton () && i < ps.size (); ++i)
         partInfo [var (ps[i])].join (part);
       return ok = (propagate() == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
+        Clause& c = ca[cr];
+        c.part ().join (part);
         clauses.push(cr);
         attachClause(cr);
 
-        Clause& c = ca[cr];
-        c.part ().join (part);
-        for (i = 0; i < ps.size(); i++)
+        for (i = 0; part.singleton () && i < ps.size(); i++)
           partInfo[var (ps[i])].join (part);
+        
     }
 
     return true;
