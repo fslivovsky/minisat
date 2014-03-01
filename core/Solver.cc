@@ -329,8 +329,9 @@ void Solver::replay (ProofVisitor& v)
       assert (cr != CRef_Undef);
       Clause &c = ca [cr];
 
-      // -- delete clause that was deleted before (except for locked clauses)
-      if (c.mark () == 0 && !locked (c))
+      // -- delete clause that was deleted before 
+      // -- except for locked and core clauses
+      if (c.mark () == 0 && !locked (c) && !c.core ())
         {
           if (c.size () > 1) detachClause (cr);
           c.mark (1);
@@ -361,17 +362,16 @@ void Solver::replay (ProofVisitor& v)
       // -- trail at decision level 1 are the decision forced by the clause
       // -- trail at decision level 2 is derived from level 1
 
-      // Traverse the proof
-      traverseProof(v, cr, p);
-
-      // undo
-      cancelUntil (0);
-
       // -- undelete the clause and attach it to the database
-      c.mark (0);
-      // -- if unit clause, add to trail and propagate
-      if (c.size () <= 1 || value (c[1]) == l_False)
+      // -- unless the learned clause is already in the database
+      if (traverseProof (v, cr, p))
+      {
+        cancelUntil (0);
+        c.mark (0);
+        // -- if unit clause, add to trail and propagate
+        if (c.size () <= 1 || value (c[1]) == l_False)
         {
+          assert (value (c[0]) == l_Undef);
           uncheckedEnqueue (c[0], cr);
           confl = propagate (true);
           labelLevel0(v);
@@ -382,7 +382,10 @@ void Solver::replay (ProofVisitor& v)
             break;
           }
         }
-      else attachClause (cr);
+        else attachClause (cr);
+      }
+      else cancelUntil (0);
+      
     }
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
@@ -412,7 +415,7 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     v.visitChainResolvent(CRef_Undef);
 }
 
-void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
+bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 {
     // The clause with which we resolve.
     const Clause& proof = ca[proofClause];
@@ -469,7 +472,10 @@ void Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
             }
         }
     }
+    
+    if (v.chainPivots.size () == 0) return false;
     v.visitChainResolvent(proofClause);
+    return true;
 }
 
 void Solver::labelLevel0(ProofVisitor& v)
