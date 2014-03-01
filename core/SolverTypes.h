@@ -132,6 +132,8 @@ class Range
     
   void join (unsigned np)    
   { 
+    if (np == 0) return;
+    
     if (undef ()) part = np;
     else if (np > max ())
       {
@@ -152,6 +154,8 @@ class Range
   }
   void join(const Range& o) 
   {
+    if (o.undef ()) return;
+    
     join (o.min ());
     join (o.max ());
   }
