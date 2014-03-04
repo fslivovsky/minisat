@@ -497,7 +497,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     if (v.chainPivots.size () == 0) return false;
     if (range != ca[proofClause].part())
         printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
-    //ca[proofClause].part(range);
+    ca[proofClause].part(range);
     v.visitChainResolvent(proofClause);
     return true;
 }
@@ -1390,7 +1390,7 @@ static Var mapVar(Var x, vec<Var>& map, Var& max)
 
 void Solver::toDimacs(FILE* f, Clause& c, vec<Var>& map, Var& max)
 {
-    if (satisfied(c)) return;
+    //if (satisfied(c)) return;
 
     for (int i = 0; i < c.size(); i++)
         if (value(c[i]) != l_False)
@@ -1422,11 +1422,11 @@ void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
     // to deallocate them at this point. Could be improved.
     int cnt = 0;
     for (int i = 0; i < clauses.size(); i++)
-        if (!satisfied(ca[clauses[i]]))
+        //if (!satisfied(ca[clauses[i]]))
             cnt++;
 
     for (int i = 0; i < clauses.size(); i++)
-        if (!satisfied(ca[clauses[i]])){
+        if (true) {//!satisfied(ca[clauses[i]])){
             Clause& c = ca[clauses[i]];
             for (int j = 0; j < c.size(); j++)
                 if (value(c[j]) != l_False)
@@ -1443,8 +1443,14 @@ void Solver::toDimacs(FILE* f, const vec<Lit>& assumps)
         fprintf(f, "%s%d 0\n", sign(assumptions[i]) ? "-" : "", mapVar(var(assumptions[i]), map, max)+1);
     }
 
-    for (int i = 0; i < clauses.size(); i++)
-        toDimacs(f, ca[clauses[i]], map, max);
+    assert(totalPart.min() == 1);
+	for (int part = 1; part <= totalPart.max(); part++)
+	{
+		fprintf(f, "c partition\n");
+		for (int i = 0; i < clauses.size(); i++)
+			if (part == ca[clauses[i]].part().max())
+				toDimacs(f, ca[clauses[i]], map, max);
+	}
 
     if (verbosity > 0)
         printf("Wrote %d clauses with %d variables.\n", cnt, max);
