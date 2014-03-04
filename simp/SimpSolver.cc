@@ -473,13 +473,14 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
               subsumed++, removeClause(cs[j]);
             else if (l != lit_Error){
               deleted_literals++;
-
+              
+              CRef csj = cs[j];
               // AG: the result of strengthenClause is a new clause that replaced cs[j]
               // AG: partition of new clause is cs[j].part ().join (c.part ())
-              if (!strengthenClause(cs[j], ~l))
+              if (!strengthenClause(csj, ~l))
                 return false;
 
-              if (proofLogging ()) ca [cs [j]].part ().join (ca[cr].part ());
+              if (proofLogging ()) ca [csj].part ().join (ca[cr].part ());
                     
 
               // Did current candidate get deleted from cs? Then check candidate at index j again:
