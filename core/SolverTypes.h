@@ -161,6 +161,9 @@ class Range
   }
   unsigned min () const { return part; }
   unsigned max () const { return part + offset; }
+
+  bool operator==(const Range& r) {return min() == r.min() && max() == r.max();}
+  bool operator!=(const Range& r) {return min() != r.min() || max() != r.max();}
 };
 
 //=================================================================================================

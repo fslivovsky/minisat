@@ -454,6 +454,8 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     v.chainPivots.clear();
 
     v.chainClauses.push(confl);
+    Range range;
+    range.join(conflC.part());
     // Now walk up the trail.
     for (int i = trail.size () - 1; pathC > 0; i--)
     {
@@ -471,29 +473,31 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         assert (reason (x) != CRef_Undef);
 
         v.chainPivots.push(trail [i]);
+        CRef r = reason(x);
+        range.join(ca[r].part());
         if (level(x) > 0)
-        {
-          CRef r = reason(x);
           v.chainClauses.push(r);
-        }
         else
             continue;
 
-        Clause &r = ca [reason (x)];
+        Clause &rC = ca [r];
 
-        assert (value (r[0]) == l_True);
+        assert (value (rC[0]) == l_True);
         // -- for all other literals in the reason
-        for (int j = 1; j < r.size (); ++j)
+        for (int j = 1; j < rC.size (); ++j)
         {
-            if (seen [var (r [j])] == 0)
+            if (seen [var (rC [j])] == 0)
             {
-                seen [var (r [j])] = 1;
+                seen [var (rC [j])] = 1;
                 pathC++;
             }
         }
     }
     
     if (v.chainPivots.size () == 0) return false;
+    if (range != ca[proofClause].part())
+        printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
+    //ca[proofClause].part(range);
     v.visitChainResolvent(proofClause);
     return true;
 }
