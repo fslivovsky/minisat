@@ -537,8 +537,11 @@ bool SimpSolver::asymm(Var v, CRef cr)
             return false;
         if (proofLogging ())
         {
+          ca [cr].part ().join (totalPart);
+          /* 
           ca [cr].part ().join (1);
           ca [cr].part ().join (currentPart);
+          */
         }
     }else
         cancelUntil(0);
