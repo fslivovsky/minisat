@@ -338,8 +338,9 @@ void Solver::replay (ProofVisitor& v)
           if (verbosity >= 2) printf ("-");
           continue;
         }
-      // -- if current clause is not core or already present, continue
-      if (c.core () == 0 || c.mark () == 0)
+      // -- if current clause is not core or is already present or is satisfied
+      // -- skip it and continue
+      if (c.core () == 0 || c.mark () == 0 || satisfied (c))
         {
           if (verbosity >= 2) printf ("-");
           continue;
