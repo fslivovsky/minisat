@@ -982,6 +982,7 @@ CRef Solver::propagate(bool coreOnly)
         Watcher        *i, *j, *end;
         num_props++;
 
+        //sort (ws, WatcherLt(ca));
         for (i = j = (Watcher*)ws, end = i + ws.size();  i != end;){
             // Try to avoid inspecting the clause:
             Lit blocker = i->blocker;

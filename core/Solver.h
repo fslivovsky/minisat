@@ -175,6 +175,7 @@ protected:
     struct Watcher {
         CRef cref;
         Lit  blocker;
+        Watcher () : cref(CRef_Undef), blocker(lit_Undef) {}
         Watcher(CRef cr, Lit p) : cref(cr), blocker(p) {}
         bool operator==(const Watcher& w) const { return cref == w.cref; }
         bool operator!=(const Watcher& w) const { return cref != w.cref; }
@@ -187,6 +188,14 @@ protected:
         bool operator()(const Watcher& w) const { return ca[w.cref].mark() == 1; }
     };
 
+    struct WatcherLt
+    {
+      const ClauseAllocator& ca;
+      WatcherLt (const ClauseAllocator& _ca) : ca(_ca) {}
+      bool operator () (Watcher const &x, Watcher const &y)
+      { return x.cref > y.cref; }
+    };
+    
     struct VarOrderLt {
         const vec<double>&  activity;
         bool operator () (Var x, Var y) const { return activity[x] > activity[y]; }
