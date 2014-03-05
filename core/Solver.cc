@@ -612,6 +612,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
           Clause &c = ca[cr];
           c.part ().join (part);
           clauses.push (cr);
+          totalPart.join (part);
           uncheckedEnqueue (ps[0], cr);
         }
       else
@@ -626,6 +627,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         Clause& c = ca[cr];
         c.part ().join (part);
         clauses.push(cr);
+        totalPart.join (part);
         attachClause(cr);
 
         for (i = 0; part.singleton () && i < ps.size(); i++)

@@ -156,6 +156,8 @@ public:
 
     void setCurrentPart(unsigned n)     { currentPart = n; }
     unsigned getCurrentPart ()          { return currentPart; }
+    Range    getTotalPart ()            { return totalPart; }
+  
 
     Range getVarRange(Var v) const      { assert(partInfo.size() > v); return partInfo[v]; }
     Range getClsRange(CRef cls) const   { assert(cls != CRef_Undef); return ca[cls].part(); }
@@ -251,6 +253,8 @@ protected:
     // Interpolation related data structures
     vec<Range> partInfo;
     unsigned currentPart;
+    // Range that includes all partitions of clauses in the database
+    Range  totalPart;
 
     // Main internal methods:
     //
