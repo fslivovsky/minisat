@@ -482,24 +482,21 @@ void Solver::labelLevel0(ProofVisitor& v)
 {
     // -- Walk the trail forward
     vec<Lit> lits;
-    int size = trail.size() - 1;
-    for (int i = start; i <= size; i++)
+    for (; start < trail.size (); ++start)
     {
         lits.clear();
-        Var x = var(trail[i]);
+        Lit q = trail [start];
+        Var x = var(q);
         if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1) continue;
 
         Clause& c = ca[reason(x)];
-        int size = c.size();
 
         // -- The number of resolution steps at this point is size-1
         // -- where size is the number of literals in the reason clause
         // -- for the unit that is currently on the trail.
-        if (size == 2)
-        {
+        if (c.size () == 2)
           // -- Binary resolution
-          v.visitResolvent(trail [i], ~c[1], reason(x));
-        }
+          v.visitResolvent(q, ~c[1], reason(x));
         else
         {
           v.chainClauses.clear();
@@ -507,14 +504,11 @@ void Solver::labelLevel0(ProofVisitor& v)
 
           v.chainClauses.push(reason(x));
           // -- The first literal (0) is the result of resolution, start from 1.
-          for (int i=1; i < size; i++)
-          {
-            v.chainPivots.push(~c[i]);
-          }
-          v.visitChainResolvent(trail[i]);
+          for (int j=1; j < c.size (); j++)
+            v.chainPivots.push(~c[j]);
+          v.visitChainResolvent(q);
         }
     }
-    start = size;
 }
 
 //=================================================================================================
