@@ -134,6 +134,7 @@ bool Solver::validate ()
   assert (proof.size () > 0);
 
 
+  scopped_ordered_propagate scp_propagate (*this, true);
   // -- final conflict clause is in the core
   Clause &last = ca [proof.last ()];
   last.core (1);
@@ -330,6 +331,10 @@ void Solver::replay (ProofVisitor& v)
   assert (log_proof);
   assert (proof.size () > 0);
   if (verbosity >= 2) printf ("REPLAYING: ");
+  
+  // -- enter ordered propagate mode
+  scopped_ordered_propagate scp_propagate (*this, true);
+  
   CRef confl = propagate (true);
   // -- assume that initial clause database is consistent
   assert (confl == CRef_Undef);
@@ -360,7 +365,6 @@ void Solver::replay (ProofVisitor& v)
           if (verbosity >= 2) printf ("-");
           continue;
         }
-
 
       if (verbosity >= 2) printf ("v");
 
