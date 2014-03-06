@@ -83,6 +83,10 @@ public:
 
     bool    proofLogging () { return log_proof;}
     void    proofLogging (bool v) { log_proof = v;}
+    bool    orderedPropagate () { return ordered_propagate; }
+    void    orderedPropagate (bool v) { ordered_propagate = v; }
+  
+  
     
     int start;
     void labelLevel0(ProofVisitor& v);
@@ -129,7 +133,8 @@ public:
     // Mode of operation:
     //
     int       verbosity;
-    bool      log_proof; // Enable proof logging
+    bool      log_proof; // Enable proof logging 
+    bool      ordered_propagate;
     double    var_decay;
     double    clause_decay;
     double    random_var_freq;
@@ -263,7 +268,7 @@ protected:
     void     newDecisionLevel ();                                                      // Begins a new decision level.
     void     uncheckedEnqueue (Lit p, CRef from = CRef_Undef);                         // Enqueue a literal. Assumes value of literal is undefined.
     bool     enqueue          (Lit p, CRef from = CRef_Undef);                         // Test if fact 'p' contradicts current state, enqueue otherwise.
-    CRef     propagate        (bool coreOnly = false);                                                      // Perform unit propagation. Returns possibly conflicting clause.
+    CRef     propagate        (bool coreOnly = false, int maxPart = 0);                                                      // Perform unit propagation. Returns possibly conflicting clause.
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, 
                                Range &part);    // (bt = backtrack)

@@ -57,6 +57,7 @@ Solver::Solver() :
     //
     verbosity        (0)
   , log_proof (opt_valid)
+  , ordered_propagate (false)
   , var_decay        (opt_var_decay)
   , clause_decay     (opt_clause_decay)
   , random_var_freq  (opt_random_var_freq)
@@ -111,6 +112,20 @@ Solver::~Solver()
 
 
 // === Validation
+namespace
+{
+  struct scopped_ordered_propagate
+  {
+    Solver &m;
+    bool m_mode;
+    scopped_ordered_propagate (Solver &s, bool v) : m(s) 
+    {
+      m_mode = m.orderedPropagate ();
+      m.orderedPropagate (v);
+    }
+    ~scopped_ordered_propagate () { m.orderedPropagate (m_mode); }
+  };
+}
 
 bool Solver::validate ()
 {
@@ -967,9 +982,25 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 |    Post-conditions:
 |      * the propagation queue is empty, even if there was a conflict.
 |________________________________________________________________________________________________@*/
-CRef Solver::propagate(bool coreOnly)
+CRef Solver::propagate(bool coreOnly, int maxPart)
 {
+  
     CRef    confl     = CRef_Undef;
+
+    // -- in ordered propagate mode, keep applying propagate with increasing partitions
+    if (ordered_propagate && maxPart == 0)
+    {
+      int init_qhead = qhead;
+      for (int i = 1; confl == CRef_Undef && i <= totalPart.max (); i++)
+      {
+        // -- reset qhead to the beginning
+        qhead = init_qhead;
+        // -- propagate up to (and including) partition i
+        confl = propagate (coreOnly, i);
+      }
+      return confl;
+    }
+  
     int     num_props = 0;
     watches.cleanAll();
 
@@ -986,12 +1017,13 @@ CRef Solver::propagate(bool coreOnly)
             if (value(blocker) == l_True){
                 *j++ = *i++; continue; }
 
-            // Make sure the false literal is data[1]:
             CRef     cr        = i->cref;
             Clause&  c         = ca[cr];
 
             if (coreOnly && !c.core ()) { *j++ = *i++; continue; }
-
+            if (maxPart > 0 && maxPart < c.part ().max ()) { *j++ = *i++; continue; }
+            
+            // Make sure the false literal is data[1]:
             Lit      false_lit = ~p;
             if (c[0] == false_lit)
                 c[0] = c[1], c[1] = false_lit;
