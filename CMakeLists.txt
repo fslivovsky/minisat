@@ -57,3 +57,25 @@ install (TARGETS minisat.LIB minisat minisat_core.BIN
   RUNTIME DESTINATION bin
   ARCHIVE DESTINATION lib)
 
+enable_testing ()
+macro(add_cnf_test name)
+  add_test (NAME ${name}
+    COMMAND minisat 
+    ${CMAKE_CURRENT_SOURCE_DIR}/${name}.cnf 
+    -tcpf=/dev/null )
+  set_tests_properties (${name}
+    PROPERTIES PASS_REGULAR_EXPRESSION "Replay SUCCESS")
+endmacro(add_cnf_test)
+
+add_cnf_test (6s120_f2)
+add_cnf_test (6s102_f7)
+add_cnf_test (6s102_f8)
+add_cnf_test (6s102_f8_1)
+add_cnf_test (6s102_f9)
+add_cnf_test (6s10_f1)
+add_cnf_test (6s10_f2)
+add_cnf_test (6s10_f3)
+add_cnf_test (6s10_f4)
+add_cnf_test (6s10_f5)
+add_cnf_test (6s10_f6)
+add_cnf_test (6s10_f7)
