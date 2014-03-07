@@ -497,7 +497,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     if (v.chainPivots.size () == 0) return false;
     if (range != ca[proofClause].part())
         printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
-    ca[proofClause].part(range);
+    //ca[proofClause].part(range);
     v.visitChainResolvent(proofClause);
     return true;
 }
@@ -511,16 +511,24 @@ void Solver::labelLevel0(ProofVisitor& v)
         lits.clear();
         Lit q = trail [start];
         Var x = var(q);
-        if (reason(x) == CRef_Undef || ca[reason(x)].size() == 1) continue;
-
+        assert(reason(x) != CRef_Undef);
         Clause& c = ca[reason(x)];
+        Range r = c.part();
+        if (c.size() == 1)
+        {
+        	trail_part[x] = r;
+            continue;
+        }
 
         // -- The number of resolution steps at this point is size-1
         // -- where size is the number of literals in the reason clause
         // -- for the unit that is currently on the trail.
         if (c.size () == 2)
-          // -- Binary resolution
-          v.visitResolvent(q, ~c[1], reason(x));
+        {
+          r.join(trail_part[var(c[1])]);
+          trail_part[x] = r;
+          v.visitResolvent(q, ~c[1], reason(x)); // -- Binary resolution
+        }
         else
         {
           v.chainClauses.clear();
@@ -529,7 +537,11 @@ void Solver::labelLevel0(ProofVisitor& v)
           v.chainClauses.push(reason(x));
           // -- The first literal (0) is the result of resolution, start from 1.
           for (int j=1; j < c.size (); j++)
+          {
+        	r.join(trail_part[var(c[j])]);
             v.chainPivots.push(~c[j]);
+          }
+          trail_part[x] = r;
           v.visitChainResolvent(q);
         }
     }
