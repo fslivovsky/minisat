@@ -478,7 +478,10 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         if (level(x) > 0)
           v.chainClauses.push(r);
         else
+        {
+            range.join(trail_part[x]);
             continue;
+        }
 
         Clause &rC = ca [r];
 
@@ -497,7 +500,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     if (v.chainPivots.size () == 0) return false;
     if (range != ca[proofClause].part())
         printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
-    //ca[proofClause].part(range);
+    ca[proofClause].part(range);
     v.visitChainResolvent(proofClause);
     return true;
 }
