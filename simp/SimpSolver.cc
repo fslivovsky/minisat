@@ -520,14 +520,13 @@ bool SimpSolver::asymm(Var v, CRef cr)
         for (int i = 0; allFalse && conflC.size () <= c.size () && i < conflC.size (); ++i)
           allFalse = allFalse && (value (conflC[i]) == l_False);
 
+        cancelUntil(0);
         if (allFalse)
         {
           removeClause (cr);
           return true;
         }
         
-        
-        cancelUntil(0);
         asymm_lits++;
         /// AG: the result of strengthenClause is the new clause added to the proof
         /// AG: the new clause does not replace anything
