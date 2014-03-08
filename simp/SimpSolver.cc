@@ -289,7 +289,8 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   else if (c.size () == 1 || (value (c[0]) == l_Undef && value (c[1]) == l_False))
   {
 #ifndef NDEBUG
-    for (int i = 2; i < c.size (); ++i) assert (value (c[i]) == l_False);
+    if (proofLogging ())
+      for (int i = 2; i < c.size (); ++i) assert (value (c[i]) == l_False);
 #endif
     // -- if new clause is a unit, propagate and bail out with a conflict
     enqueue (c[0], cr);
