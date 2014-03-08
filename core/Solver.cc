@@ -1146,8 +1146,15 @@ bool Solver::simplify()
 {
     assert(decisionLevel() == 0);
 
-    if (!ok || propagate() != CRef_Undef)
-        return ok = false;
+    if (!ok) return ok = false;
+    
+    CRef confl = propagate ();
+    if (confl != CRef_Undef)
+    {
+      if (log_proof) proof.push (confl);
+      return ok = false;
+    }
+    
 
     if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
         return true;
