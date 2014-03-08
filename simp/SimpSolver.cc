@@ -263,10 +263,10 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
     }
     
     attachClause(cr);
+    remove(occurs[var(l)], cr);
+    n_occ[toInt(l)]--;
+    updateElimHeap(var(l));
   }
-  remove(occurs[var(l)], cr);
-  n_occ[toInt(l)]--;
-  updateElimHeap(var(l));
 
   if (proofLogging ())
   {
