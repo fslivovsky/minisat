@@ -654,7 +654,9 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
       // -- mark variables as shared if necessary
       for (int i = 0; part.singleton () && i < ps.size (); ++i)
         partInfo [var (ps[i])].join (part);
-      return ok = (propagate() == CRef_Undef);
+      CRef confl = propagate ();
+      if (log_proof && confl != CRef_Undef) proof.push (confl);
+      return ok = (confl == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
         Clause& c = ca[cr];
@@ -1158,8 +1160,14 @@ bool Solver::simplify()
 {
     assert(decisionLevel() == 0);
 
-    if (!ok || propagate() != CRef_Undef)
-        return ok = false;
+    if (!ok) return false;
+
+    CRef confl = propagate ();
+    if (confl != CRef_Undef)
+    {
+      if (log_proof) proof.push (confl);
+      return ok = false;
+    }
 
     if (nAssigns() == simpDB_assigns || (simpDB_props > 0))
         return true;
