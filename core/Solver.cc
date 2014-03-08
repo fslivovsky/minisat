@@ -392,6 +392,10 @@ void Solver::replay (ProofVisitor& v)
         if (c.size () <= 1 || value (c[1]) == l_False)
         {
           assert (value (c[0]) == l_Undef);
+#ifndef NDEBUG
+          for (int j = 1; j < c.size (); ++j)
+            assert (value (c[j]) == l_False);
+#endif
           uncheckedEnqueue (c[0], cr);
           confl = propagate (true);
           labelLevel0(v);
