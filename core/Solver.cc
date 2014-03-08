@@ -639,7 +639,10 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
       // -- mark variables as shared if necessary
       for (int i = 0; part.singleton () && i < ps.size (); ++i)
         partInfo [var (ps[i])].join (part);
-      return ok = (propagate() == CRef_Undef);
+      
+      CRef confl = propagate ();
+      if (log_proof && confl != CRef_Undef) proof.push (confl);
+      return ok = (confl == CRef_Undef);
     }else{
         CRef cr = ca.alloc(ps, false);
         Clause& c = ca[cr];
