@@ -117,40 +117,28 @@ inline lbool toLbool(int   v) { return lbool((uint8_t)v);  }
 
 class Range
 {
-  unsigned part    : 16;
-  unsigned offset  : 16;
+  unsigned m_min  : 16;
+  unsigned m_max  : 16;
 
  public:
   enum { part_Undef = 0 };
   
-  Range () : part (part_Undef), offset (0) {}
-  Range (unsigned p) : part (p), offset (0) {}
+  Range () : m_min (part_Undef), m_max (part_Undef) {}
+  Range (unsigned p) : m_min (p), m_max (p) {}
 
-  bool undef () const { return part == part_Undef; }
-  void reset () { part = part_Undef; offset = 0; }
-  bool singleton () const { return offset == 0; }
+  bool undef () const { return m_min == part_Undef; }
+  void reset () { m_min = part_Undef; m_max = part_Undef; }
+  bool singleton () const { return m_min == m_max; }
     
   void join (unsigned np)    
   { 
     if (np == 0) return;
     
-    if (undef ()) part = np;
-    else if (np > max ())
-      {
-        // -- increase offset to include np
-        unsigned no = np - part;
-        if (no > offset) offset = no;
-        assert (offset >= no && "Overflow");
-      }
-    else if (np < min ())
-      {
-        unsigned m = max ();
-        // -- reset current partition to new min
-        part = np;
-        offset = 0;
-        // -- extend to include old max
-        join (m);
-      }
+    if (undef ()) { m_min = np; m_max = np; }
+    else if (np > m_max)
+    	m_max = np;
+    else if (np < m_min)
+    	m_min = np;
   }
   void join(const Range& o) 
   {
@@ -159,11 +147,11 @@ class Range
     join (o.min ());
     join (o.max ());
   }
-  unsigned min () const { return part; }
-  unsigned max () const { return part + offset; }
+  unsigned min () const { return m_min; }
+  unsigned max () const { return m_max; }
 
-  bool operator==(const Range& r) {return min() == r.min() && max() == r.max();}
-  bool operator!=(const Range& r) {return min() != r.min() || max() != r.max();}
+  bool operator==(const Range& r) {return m_min == r.m_min && m_max == r.m_max;}
+  bool operator!=(const Range& r) {return m_min != r.m_min || m_max != r.m_max;}
 };
 
 //=================================================================================================
