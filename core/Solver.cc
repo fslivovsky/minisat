@@ -293,6 +293,11 @@ bool Solver::validateLemma (CRef cr)
       else if (level (x) <= 0) ca [reason(x)].core (1);
     }
 
+  // mark all level0 literals in the lemma as core
+  for (int i = 0; i < lemma.size (); ++i)
+    if (value (lemma[i]) != l_Undef && level (var (lemma [i])) <= 0)
+      ca[reason (var (lemma [i]))].core (1);
+  
   for (int i = trail.size () - 1; i >= trail_lim[1]; i--)
     {
       Var x = var (trail [i]);
