@@ -413,8 +413,15 @@ void Solver::replay (ProofVisitor& v)
         }
         else attachClause (cr);
       }
-      else cancelUntil (0);
-      
+      else 
+      {
+        assert (c.core ());
+        assert (c.mark ());
+        // -- mark this clause as non-core. It is not part of the
+        // -- proof.
+        c.core (0);
+        cancelUntil (0);
+      }
     }
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
