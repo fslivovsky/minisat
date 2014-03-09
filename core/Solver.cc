@@ -497,7 +497,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         }
     }
     
-    if (v.chainPivots.size () == 0) return false;
+    if (v.chainClauses.size () <= 1) return false;
     v.visitChainResolvent(proofClause);
     return true;
 }
