@@ -293,6 +293,11 @@ bool Solver::validateLemma (CRef cr)
       else if (level (x) <= 0) ca [reason(x)].core (1);
     }
 
+  // mark all level0 literals in the lemma as core
+  for (int i = 0; i < lemma.size (); ++i)
+    if (value (lemma[i]) != l_Undef && level (var (lemma [i])) <= 0)
+      ca[reason (var (lemma [i]))].core (1);
+  
   for (int i = trail.size () - 1; i >= trail_lim[1]; i--)
     {
       Var x = var (trail [i]);
@@ -392,6 +397,10 @@ void Solver::replay (ProofVisitor& v)
         if (c.size () <= 1 || value (c[1]) == l_False)
         {
           assert (value (c[0]) == l_Undef);
+#ifndef NDEBUG
+          for (int j = 1; j < c.size (); ++j)
+            assert (value (c[j]) == l_False);
+#endif
           uncheckedEnqueue (c[0], cr);
           confl = propagate (true);
           labelLevel0(v);
@@ -404,8 +413,15 @@ void Solver::replay (ProofVisitor& v)
         }
         else attachClause (cr);
       }
-      else cancelUntil (0);
-      
+      else 
+      {
+        assert (c.core ());
+        assert (c.mark ());
+        // -- mark this clause as non-core. It is not part of the
+        // -- proof.
+        c.core (0);
+        cancelUntil (0);
+      }
     }
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
@@ -497,8 +513,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
         }
     }
     
-    if (v.chainClauses.size () == 1) return false;
-    if (v.chainPivots.size () == 0) return false;
+    if (v.chainClauses.size () <= 1) return false;
     //if (range != ca[proofClause].part())
     //    printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
     ca[proofClause].part(range);
@@ -649,6 +664,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
       // -- mark variables as shared if necessary
       for (int i = 0; part.singleton () && i < ps.size (); ++i)
         partInfo [var (ps[i])].join (part);
+      
       CRef confl = propagate ();
       if (log_proof && confl != CRef_Undef) proof.push (confl);
       return ok = (confl == CRef_Undef);
