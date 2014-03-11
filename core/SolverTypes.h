@@ -151,7 +151,7 @@ class Range
   unsigned max () const { return m_max; }
 
   bool operator==(const Range& r) {return m_min == r.m_min && m_max == r.m_max;}
-  bool operator!=(const Range& r) {return m_min != r.m_min || m_max != r.m_max;}
+  bool operator!=(const Range& r) {return !operator==(r);}
 };
 
 //=================================================================================================
