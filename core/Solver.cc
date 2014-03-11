@@ -522,67 +522,70 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-bool Solver::fix(CRef anchor, vec<Lit>& out_learnt, Range& range, int part)
+void Solver::traverse(Lit lit, CRef confl, int part)
 {
-	vec<int> mySeen(nVars(),0);
+	vec<char> mySeen(nVars(), 0);
+	int pathC = 0;
 
-	// The conflict clause
-	const Clause& a = ca[anchor];
+	Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
-	// The asserting literal remains the same.
-	out_learnt.push(a[0]);
+	// Generate conflict clause:
+	//
+	int index   = trail.size() - 1;
 
-	int pathC = a.size () - 1;
-	for (int i = 1; i < a.size (); ++i)
-	{
-		Var x = var (a [i]);
-		Range r = getVarRange(x);
-		if (r.max() < part)
-            mySeen[x] = 1;
-		else
-			out_learnt.push(a[i]);
-	}
+	vec<Lit> chainPivots;
+	vec<CRef> chainClauses;
 
-	for (int i = trail.size () - 1; pathC > 0; i--)
-	{
-		assert (i >= 0);
-		Var x = var (trail [i]);
-		if (!mySeen [x]) continue;
+	do{
+		assert(confl != CRef_Undef); // (otherwise should be UIP)
 
-		mySeen [x] = 0;
+		if (ca[confl].part ().max () < currentPart)
+		{
+		  assert(p != lit_Undef); // Cannot be entered in the first iteration
+		  confl = fixrec (confl, currentPart - 1);
+		}
+		// fixrec checks whether confl needs fixing. If it does, it
+		// will create a new clause, set it as a reason and return it.
+
+		chainClauses.push(confl);
+
+		Clause& c = ca[confl];
+
+		assert (c.part ().max () <= currentPart);
+
+		for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
+			Lit q = c[j];
+
+			if (!mySeen[var(q)]){
+			  // -- don't resolve with clauses from higher partitions
+			  if (level(var(q)) != 1)
+				{
+				  CRef r = reason(var(q));
+				  if (ca[r].part().max() <= part)
+				  {
+				    // ensure that reason (var (q)) is in correct partition
+				    mySeen[var(q)] = 1;
+                    pathC++;
+				  }
+				}
+			}
+		}
+
+		// Select next clause to look at:
+		while (!mySeen[var(trail[index--])]);
+		p     = trail[index+1];
+		// We resolve with p
+		chainPivots.push(p);
+		confl = reason(var(p));
+		mySeen[var(p)] = 0;
 		pathC--;
 
-		if (level(x) == 1)
-	    {
-			out_learnt.push(~trail[i]);
-			continue;
-	    }
+	}while (pathC > 0);
+}
 
-		CRef r = reason(x);
-
-		assert (reason (x) != CRef_Undef);
-		if (level(x) == 0) continue;
-
-		Clause &rC = ca [r];
-
-		assert (value (rC[0]) == l_True);
-		// -- for all other literals in the reason
-		for (int j = 1; j < rC.size (); ++j)
-		{
-			Var v = var (rC [j]);
-			if (partInfo[v].max() < part)
-			{
-			    if (mySeen [v] == 0)
-			    {
-				    mySeen [var (rC [j])] = 1;
-				    pathC++;
-			    }
-			}
-			else
-                out_learnt.push(rC[j]);
-		}
-	}
-    return true;
+CRef Solver::fixrec(CRef anchor, int part)
+{
+	return anchor;
 }
 
 void Solver::labelLevel0(ProofVisitor& v)
