@@ -521,6 +521,69 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
+bool Solver::fix(CRef anchor, vec<Lit>& out_learnt, Range& range, int part)
+{
+	vec<int> mySeen(nVars(),0);
+
+	// The conflict clause
+	const Clause& a = ca[anchor];
+
+	// The asserting literal remains the same.
+	out_learnt.push(a[0]);
+
+	int pathC = a.size () - 1;
+	for (int i = 1; i < a.size (); ++i)
+	{
+		Var x = var (a [i]);
+		Range r = getVarRange(x);
+		if (r.max() < part)
+            mySeen[x] = 1;
+		else
+			out_learnt.push(a[i]);
+	}
+
+	for (int i = trail.size () - 1; pathC > 0; i--)
+	{
+		assert (i >= 0);
+		Var x = var (trail [i]);
+		if (!mySeen [x]) continue;
+
+		mySeen [x] = 0;
+		pathC--;
+
+		if (level(x) == 1)
+	    {
+			out_learnt.push(~trail[i]);
+			continue;
+	    }
+
+		CRef r = reason(x);
+
+		assert (reason (x) != CRef_Undef);
+		if (level(x) == 0) continue;
+
+		Clause &rC = ca [r];
+
+		assert (value (rC[0]) == l_True);
+		// -- for all other literals in the reason
+		for (int j = 1; j < rC.size (); ++j)
+		{
+			Var v = var (rC [j]);
+			if (partInfo[v].max() < part)
+			{
+			    if (mySeen [v] == 0)
+			    {
+				    mySeen [var (rC [j])] = 1;
+				    pathC++;
+			    }
+			}
+			else
+                out_learnt.push(rC[j]);
+		}
+	}
+    return true;
+}
+
 void Solver::labelLevel0(ProofVisitor& v)
 {
     // -- Walk the trail forward

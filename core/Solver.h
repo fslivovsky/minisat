@@ -92,6 +92,7 @@ public:
     void labelLevel0(ProofVisitor& v);
     bool traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
     void labelFinal(ProofVisitor& v, CRef confl);
+    bool fix(CRef anchor, vec<Lit>& out_learnt, Range& range, int part);
 
     // Variable mode:
     // 
