@@ -93,7 +93,7 @@ public:
     bool traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
     void labelFinal(ProofVisitor& v, CRef confl);
     CRef fixrec(CRef anchor, int part);
-    void traverse(Lit lit, CRef reason, int part);
+    bool traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef reason, int part);
 
     // Variable mode:
     // 

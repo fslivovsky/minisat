@@ -389,7 +389,8 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      if (traverseProof (v, cr, p))
+      if (traverse(v, cr, lit_Undef, p, totalPart.max()))
+      //if (traverseProof (v, cr, p))
       {
         cancelUntil (0);
         c.mark (0);
@@ -447,7 +448,10 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     // The clause is false, and results in the empty clause,
     // all are therefore seen and resolved.
     for (int i = 0; i < source.size (); ++i)
+    {
       v.chainPivots.push(~source [i]);
+      v.chainClauses.push(CRef_Undef);
+    }
     
     v.visitChainResolvent(CRef_Undef);
 }
@@ -496,6 +500,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
           v.chainClauses.push(r);
         else
         {
+            v.chainClauses.push(CRef_Undef);
             range.join(trail_part[x]);
             continue;
         }
@@ -522,7 +527,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-void Solver::traverse(Lit lit, CRef confl, int part)
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, int part)
 {
   vec<char> mySeen(nVars(), 0);
   int pathC = 0;
@@ -536,10 +541,13 @@ void Solver::traverse(Lit lit, CRef confl, int part)
   vec<Lit> chainPivots;
   vec<CRef> chainClauses;
 
+  Range updatedRange;
+
+  bool level0 = false;
   do{
     assert(confl != CRef_Undef); // (otherwise should be UIP)
 
-    if (ca[confl].part ().max () < part)
+    if (false)//ca[confl].part ().max () < part)
     {
       assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it
@@ -550,9 +558,10 @@ void Solver::traverse(Lit lit, CRef confl, int part)
     // the partition of the learned clause can be computed as the join
     // of partitions of all chainClauses and chainPivots.
     chainClauses.push(confl);
-    
 
     Clause& c = ca[confl];
+
+    updatedRange.join(c.part());
 
     assert (c.part ().max () <= part);
 
@@ -561,8 +570,9 @@ void Solver::traverse(Lit lit, CRef confl, int part)
 
       if (!mySeen[var(q)]){
         // -- don't resolve with clauses from higher partitions
-        if (level(var(q)) != 1)
+        if (level(var(q)) > 1)
         {
+          assert(level0 == false);
           CRef r = reason(var(q));
           if (ca[r].part().max() <= part)
           {
@@ -571,12 +581,17 @@ void Solver::traverse(Lit lit, CRef confl, int part)
             pathC++;
           }
         }
+        else if (level(var(q)) == 0)
+        {
+          chainPivots.push(q);
+          chainClauses.push(CRef_Undef);
+          // Take care of the range
+          updatedRange.join(trail_part[var(q)]);
+        }
         // XXX missing 1: constructing the new learned clause
-
-        // XXX missing 2: handling level 0 (at least the condition
-        // above should be level(var(q)) > 1)
       }
     }
+    if (pathC == 0) break;
 
     // Select next clause to look at:
     while (!mySeen[var(trail[index--])]);
@@ -587,7 +602,18 @@ void Solver::traverse(Lit lit, CRef confl, int part)
     mySeen[var(p)] = 0;
     pathC--;
 
-  }while (pathC > 0);
+  }while (pathC >= 0);
+
+  v.chainClauses.clear();
+  v.chainPivots.clear();
+
+  chainClauses.moveTo(v.chainClauses);
+  chainPivots.moveTo(v.chainPivots);
+
+  if (v.chainClauses.size () <= 1) return false;
+  ca[proofClause].part(updatedRange);
+  v.visitChainResolvent(proofClause);
+  return true;
 
   // XXX here, need to decide whether a new clause needs to be created
   // XXX the new clause should be registered as the reason instead of
@@ -600,6 +626,8 @@ void Solver::traverse(Lit lit, CRef confl, int part)
 
   // XXX However, we know whether new clause needs to be created, 
   // XXX based on whether we skipped any resolutions or fixed any clauses
+
+
 }
 CRef Solver::fixrec(CRef anchor, int part)
 {
