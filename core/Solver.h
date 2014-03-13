@@ -164,10 +164,22 @@ public:
     Range    getTotalPart ()            { return totalPart; }
   
 
-    Range getVarRange(Var v) const      { assert(partInfo.size() > v); return partInfo[v]; }
-    Range getClsRange(CRef cls) const   { assert(cls != CRef_Undef); return ca[cls].part(); }
- 	const Clause& getClause(CRef cr) const    {return ca[cr];}
-	CRef			 getReason(Var x) const      {return reason(x);}
+  Range part (Var v) const   { assert(partInfo.size() > v); return partInfo[v]; }
+  Range getVarRange(Var v) const { return part (v); }
+  Range getClsRange(CRef cls) const   { assert(cls != CRef_Undef); return ca[cls].part(); }
+  const Clause& getClause(CRef cr) const    {return ca[cr];}
+  CRef getReason(Var x) const      {return reason(x);}
+  
+  /// -- a clause is shared if all of its variables appear in clauses
+  /// -- with a higher partition
+  bool shared (CRef cr)
+  {
+    Clause &c = ca[cr];
+    for (int i = 0; i < c.size (); ++i)
+      if (part (var (c[i])).max () <= c.part ().max ()) return false;
+    return true;
+  }
+  
  
     
     

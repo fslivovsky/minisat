@@ -381,7 +381,7 @@ void Solver::replay (ProofVisitor& v)
       newDecisionLevel (); // decision level 2
       CRef p = propagate (true);
       assert (p != CRef_Undef);
-      // -- XXX Here can run analyze() to rebuild the resolution
+      
       // -- proof, extract interpolants, etc.
       // -- trail at decision level 0 is implied by the database
       // -- trail at decision level 1 are the decision forced by the clause
@@ -393,6 +393,7 @@ void Solver::replay (ProofVisitor& v)
       {
         cancelUntil (0);
         c.mark (0);
+        if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
         if (c.size () <= 1 || value (c[1]) == l_False)
         {
