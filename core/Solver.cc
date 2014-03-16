@@ -389,9 +389,13 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      if (traverse(v, cr, lit_Undef, p, totalPart.max()))
+      vec<Lit> learnt;
+      Range range;
+      if (traverse(v, cr, p, totalPart.max(), learnt, range))
       //if (traverseProof (v, cr, p))
       {
+        ca[cr].part(range);
+        v.visitChainResolvent(cr);
         cancelUntil (0);
         c.mark (0);
         if (verbosity >= 2 && shared (cr)) printf ("S");
@@ -527,19 +531,17 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int part)
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, vec<Lit>& out_learnt, Range& range)
 {
   vec<char> mySeen(nVars(), 0);
   int pathC = 0;
   int pathZero = 0;
 
-  vec<Lit> fixed;
-
   // -- If p is not  Undef, then the pivot remains p, thus must be the first
   // -- literal in the new clause.
-  if (p != lit_Undef) fixed.push(p);
-  //Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
+  Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
+  if (p != lit_Undef) out_learnt.push(p);
   // Generate conflict clause:
   //
   int index   = trail.size() - 1;
@@ -547,14 +549,12 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
   vec<Lit> chainPivots;
   vec<CRef> chainClauses;
 
-  Range updatedRange;
-
   do{
     assert(confl != CRef_Undef); // (otherwise should be UIP)
 
-    if (false)//ca[confl].part ().max () < part)
+    if (ca[confl].part ().max () < part)
     {
-      assert(p != lit_Undef); // Cannot be entered in the first iteration
+      //assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it
       // will create a new clause, set it as a reason and return it.
       confl = fixrec (v, confl, part - 1);
@@ -566,7 +566,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
 
     Clause& c = ca[confl];
 
-    updatedRange.join(c.part());
+    range.join(c.part());
 
     assert (c.part ().max () <= part);
 
@@ -584,17 +584,16 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
             mySeen[var(q)] = 1;
             pathC++;
           }
-          else if (level(var(q)) == 0)
+          else if (level(var(q)) == 0 && trail_part[var(q)].max() <= part)
           {
             mySeen[var(q)] = 1;
             pathZero++;
           }
           else
-            fixed.push(q);
+            out_learnt.push(q);
         }
         else
-          fixed.push(q);
-        // XXX missing 1: constructing the new learned clause
+          out_learnt.push(q);
       }
     }
     if (pathC == 0) break;
@@ -619,13 +618,13 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
     chainPivots.push(q);
     chainClauses.push(CRef_Undef);
     // Take care of the range
-    updatedRange.join(trail_part[var(q)]);
+    range.join(trail_part[var(q)]);
 
     pathZero--;
 
   }
 
-  if (proofClause == CRef_Undef)
+  if (proofClause != CRef_Undef)
   {
     // -- If there is no Proof Clause, we are in fixing mode
 
@@ -642,6 +641,26 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
     // XXX based on whether we skipped any resolutions or fixed any clauses
 
 
+    Clause& original = ca[proofClause];
+    bool bNewResolvent = false;
+    if (out_learnt.size() == original.size())
+    {
+      vec<Lit> sortedOriginalCopy;
+      for (int i=0; i < original.size(); i++)
+        sortedOriginalCopy.push(original[i]);
+      sort(sortedOriginalCopy);
+
+      vec<Lit> sortedLearntCopy;
+      out_learnt.copyTo(sortedLearntCopy);
+      sort(sortedLearntCopy);
+
+      for (int i=0; i < out_learnt.size() && bNewResolvent == false; i++)
+        if (sortedOriginalCopy[i] != sortedLearntCopy[i])
+          bNewResolvent = true;
+    }
+    else bNewResolvent = true;
+
+    if (bNewResolvent) printf("Not good: %d %d\n", out_learnt.size(), original.size());
   }
 
   v.chainClauses.clear();
@@ -651,15 +670,68 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int 
   chainPivots.moveTo(v.chainPivots);
 
   if (v.chainClauses.size () <= 1) return false;
-  ca[proofClause].part(updatedRange);
-  v.visitChainResolvent(proofClause);
   return true;
 
 }
 CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
 {
-  traverse(v, CRef_Undef, ca[anchor][0], anchor, part);
-	return anchor;
+  // -- Need to check if traverse should be called or not.
+
+  CRef resolvent = anchor;
+  vec<Lit> learnt;
+  Range range;
+  bool bRes = traverse(v, CRef_Undef, anchor, part, learnt, range);
+
+  if (bRes == false) return anchor;
+
+  assert(range.max() <= part);
+
+  Clause& original = ca[anchor];
+  bool bNewResolvent = false;
+  if (learnt.size() == original.size())
+  {
+    vec<Lit> sortedOriginalCopy;
+    for (int i=0; i < original.size(); i++)
+      sortedOriginalCopy.push(original[i]);
+    sort(sortedOriginalCopy);
+
+    vec<Lit> sortedLearntCopy;
+    learnt.copyTo(sortedLearntCopy);
+    sort(sortedLearntCopy);
+
+    for (int i=0; i < learnt.size() && bNewResolvent == false; i++)
+      if (sortedOriginalCopy[i] != sortedLearntCopy[i])
+        bNewResolvent = true;
+  }
+  else bNewResolvent = true;
+
+  if (bNewResolvent == true)
+  {
+    // -- Create the new clause.
+    if (value(learnt[0]) == l_True)
+    {
+      //assert(learnt.size() == 1 || level(var(learnt[1])) >= 1);
+
+      resolvent = ca.alloc(learnt, true);
+      ca[resolvent].part (range);
+      learnts.push(resolvent);
+      if (learnt.size() > 1) attachClause(resolvent);
+
+      vardata[var(learnt[0])].reason = resolvent;
+    }
+    else
+    {
+      assert(value(learnt[0]) == l_False);
+      resolvent = ca.alloc(learnt, true);
+      ca[resolvent].part (range);
+      learnts.push(resolvent);
+      if (learnt.size() > 1) attachClause(resolvent);
+    }
+
+    v.visitChainResolvent(resolvent);
+  }
+
+	return resolvent;
 }
 
 void Solver::labelLevel0(ProofVisitor& v)
