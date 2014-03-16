@@ -389,7 +389,8 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      if (traverse(v, cr, lit_Undef, p, totalPart.max()))
+      vec<Lit> out;
+      if (traverse(v, cr, lit_Undef, p, totalPart.max(), out))
       //if (traverseProof (v, cr, p))
       {
         cancelUntil (0);
@@ -527,10 +528,11 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, int part)
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, int part, vec<Lit>& out_learnt)
 {
   vec<char> mySeen(nVars(), 0);
   int pathC = 0;
+  int pathZero = 0;
 
   Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
@@ -583,10 +585,12 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
         }
         else if (level(var(q)) == 0)
         {
-          chainPivots.push(q);
-          chainClauses.push(CRef_Undef);
+          //chainPivots.push(q);
+          //chainClauses.push(CRef_Undef);
           // Take care of the range
-          updatedRange.join(trail_part[var(q)]);
+          //updatedRange.join(trail_part[var(q)]);
+          mySeen[var(q)] = 1;
+          pathZero++;
         }
         // XXX missing 1: constructing the new learned clause
       }
@@ -603,6 +607,21 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
     pathC--;
 
   }while (pathC >= 0);
+
+  for (; index >=0 && pathZero >=0; index--)
+  {
+    Lit q = trail[index];
+    if (!mySeen[var(q)]) continue;
+    assert(level(var(q)) == 0);
+
+    chainPivots.push(q);
+    chainClauses.push(CRef_Undef);
+    // Take care of the range
+    updatedRange.join(trail_part[var(q)]);
+
+    pathZero--;
+
+  }
 
   v.chainClauses.clear();
   v.chainPivots.clear();
