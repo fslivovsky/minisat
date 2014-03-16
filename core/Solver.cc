@@ -389,8 +389,7 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      vec<Lit> out;
-      if (traverse(v, cr, lit_Undef, p, totalPart.max(), out))
+      if (traverse(v, cr, lit_Undef, p, totalPart.max()))
       //if (traverseProof (v, cr, p))
       {
         cancelUntil (0);
@@ -528,13 +527,18 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, int part, vec<Lit>& out_learnt)
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit p, CRef confl, int part)
 {
   vec<char> mySeen(nVars(), 0);
   int pathC = 0;
   int pathZero = 0;
 
-  Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
+  vec<Lit> fixed;
+
+  // -- If p is not  Undef, then the pivot remains p, thus must be the first
+  // -- literal in the new clause.
+  if (p != lit_Undef) fixed.push(p);
+  //Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
   // Generate conflict clause:
   //
@@ -545,7 +549,6 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
 
   Range updatedRange;
 
-  bool level0 = false;
   do{
     assert(confl != CRef_Undef); // (otherwise should be UIP)
 
@@ -554,7 +557,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
       assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it
       // will create a new clause, set it as a reason and return it.
-      confl = fixrec (confl, part - 1);
+      confl = fixrec (v, confl, part - 1);
     }
 
     // the partition of the learned clause can be computed as the join
@@ -572,26 +575,25 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
 
       if (!mySeen[var(q)]){
         // -- don't resolve with clauses from higher partitions
-        if (level(var(q)) > 1)
+        CRef r = reason(var(q));
+        if (r != CRef_Undef && ca[r].part().max() <= part)
         {
-          assert(level0 == false);
-          CRef r = reason(var(q));
-          if (ca[r].part().max() <= part)
+          // ensure that reason (var (q)) is in correct partition
+          if (level(var(q)) > 1)
           {
-            // ensure that reason (var (q)) is in correct partition
             mySeen[var(q)] = 1;
             pathC++;
           }
+          else if (level(var(q)) == 0)
+          {
+            mySeen[var(q)] = 1;
+            pathZero++;
+          }
+          else
+            fixed.push(q);
         }
-        else if (level(var(q)) == 0)
-        {
-          //chainPivots.push(q);
-          //chainClauses.push(CRef_Undef);
-          // Take care of the range
-          //updatedRange.join(trail_part[var(q)]);
-          mySeen[var(q)] = 1;
-          pathZero++;
-        }
+        else
+          fixed.push(q);
         // XXX missing 1: constructing the new learned clause
       }
     }
@@ -623,6 +625,25 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
 
   }
 
+  if (proofClause == CRef_Undef)
+  {
+    // -- If there is no Proof Clause, we are in fixing mode
+
+    // XXX here, need to decide whether a new clause needs to be created
+    // XXX the new clause should be registered as the reason instead of
+    // XXX the old one
+
+    // XXX The decision to create a new clause depends on whether the
+    // XXX clause obtained by resolving all chain clauses and pivots is
+    // XXX different from the clause we were fixing
+
+
+    // XXX However, we know whether new clause needs to be created,
+    // XXX based on whether we skipped any resolutions or fixed any clauses
+
+
+  }
+
   v.chainClauses.clear();
   v.chainPivots.clear();
 
@@ -634,22 +655,10 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, Lit lit, CRef confl, in
   v.visitChainResolvent(proofClause);
   return true;
 
-  // XXX here, need to decide whether a new clause needs to be created
-  // XXX the new clause should be registered as the reason instead of
-  // XXX the old one
-
-  // XXX The decision to create a new clause depends on whether the
-  // XXX clause obtained by resolving all chain clauses and pivots is
-  // XXX different from the clause we were fixing
-  
-
-  // XXX However, we know whether new clause needs to be created, 
-  // XXX based on whether we skipped any resolutions or fixed any clauses
-
-
 }
-CRef Solver::fixrec(CRef anchor, int part)
+CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
 {
+  traverse(v, CRef_Undef, ca[anchor][0], anchor, part);
 	return anchor;
 }
 
