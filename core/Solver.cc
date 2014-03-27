@@ -524,65 +524,83 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 
 void Solver::traverse(Lit lit, CRef confl, int part)
 {
-	vec<char> mySeen(nVars(), 0);
-	int pathC = 0;
+  vec<char> mySeen(nVars(), 0);
+  int pathC = 0;
 
-	Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
+  Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
-	// Generate conflict clause:
-	//
-	int index   = trail.size() - 1;
+  // Generate conflict clause:
+  //
+  int index   = trail.size() - 1;
 
-	vec<Lit> chainPivots;
-	vec<CRef> chainClauses;
+  vec<Lit> chainPivots;
+  vec<CRef> chainClauses;
 
-	do{
-		assert(confl != CRef_Undef); // (otherwise should be UIP)
+  do{
+    assert(confl != CRef_Undef); // (otherwise should be UIP)
 
-		if (ca[confl].part ().max () < currentPart)
-		{
-		  assert(p != lit_Undef); // Cannot be entered in the first iteration
-		  confl = fixrec (confl, currentPart - 1);
-		}
-		// fixrec checks whether confl needs fixing. If it does, it
-		// will create a new clause, set it as a reason and return it.
+    if (ca[confl].part ().max () < part)
+    {
+      assert(p != lit_Undef); // Cannot be entered in the first iteration
+      // fixrec checks whether confl needs fixing. If it does, it
+      // will create a new clause, set it as a reason and return it.
+      confl = fixrec (confl, part - 1);
+    }
 
-		chainClauses.push(confl);
+    // the partition of the learned clause can be computed as the join
+    // of partitions of all chainClauses and chainPivots.
+    chainClauses.push(confl);
+    
 
-		Clause& c = ca[confl];
+    Clause& c = ca[confl];
 
-		assert (c.part ().max () <= currentPart);
+    assert (c.part ().max () <= part);
 
-		for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
-			Lit q = c[j];
+    for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
+      Lit q = c[j];
 
-			if (!mySeen[var(q)]){
-			  // -- don't resolve with clauses from higher partitions
-			  if (level(var(q)) != 1)
-				{
-				  CRef r = reason(var(q));
-				  if (ca[r].part().max() <= part)
-				  {
-				    // ensure that reason (var (q)) is in correct partition
-				    mySeen[var(q)] = 1;
-                    pathC++;
-				  }
-				}
-			}
-		}
+      if (!mySeen[var(q)]){
+        // -- don't resolve with clauses from higher partitions
+        if (level(var(q)) != 1)
+        {
+          CRef r = reason(var(q));
+          if (ca[r].part().max() <= part)
+          {
+            // ensure that reason (var (q)) is in correct partition
+            mySeen[var(q)] = 1;
+            pathC++;
+          }
+        }
+        // XXX missing 1: constructing the new learned clause
 
-		// Select next clause to look at:
-		while (!mySeen[var(trail[index--])]);
-		p     = trail[index+1];
-		// We resolve with p
-		chainPivots.push(p);
-		confl = reason(var(p));
-		mySeen[var(p)] = 0;
-		pathC--;
+        // XXX missing 2: handling level 0 (at least the condition
+        // above should be level(var(q)) > 1)
+      }
+    }
 
-	}while (pathC > 0);
+    // Select next clause to look at:
+    while (!mySeen[var(trail[index--])]);
+    p     = trail[index+1];
+    // We resolve with p
+    chainPivots.push(p);
+    confl = reason(var(p));
+    mySeen[var(p)] = 0;
+    pathC--;
+
+  }while (pathC > 0);
+
+  // XXX here, need to decide whether a new clause needs to be created
+  // XXX the new clause should be registered as the reason instead of
+  // XXX the old one
+
+  // XXX The decision to create a new clause depends on whether the
+  // XXX clause obtained by resolving all chain clauses and pivots is
+  // XXX different from the clause we were fixing
+  
+
+  // XXX However, we know whether new clause needs to be created, 
+  // XXX based on whether we skipped any resolutions or fixed any clauses
 }
-
 CRef Solver::fixrec(CRef anchor, int part)
 {
 	return anchor;
