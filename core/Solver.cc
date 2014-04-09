@@ -640,27 +640,62 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, v
     // XXX However, we know whether new clause needs to be created,
     // XXX based on whether we skipped any resolutions or fixed any clauses
 
+    vec<Lit> sortedLearntCopy;
+    out_learnt.copyTo(sortedLearntCopy);
+    sort(sortedLearntCopy);
+    for (int i=0; i < sortedLearntCopy.size()-1; i++)
+    {
+      if (sortedLearntCopy[i] == sortedLearntCopy[i+1])
+      {
+        sortedLearntCopy[i] = sortedLearntCopy[sortedLearntCopy.size() -1];
+        sortedLearntCopy.shrink(1);
+        sort(sortedLearntCopy);
+        i--;
+      }
+    }
+
+    sort(sortedLearntCopy);
 
     Clause& original = ca[proofClause];
     bool bNewResolvent = false;
-    if (out_learnt.size() == original.size())
+    vec<Lit> sortedOriginalCopy;
+    for (int i=0; i < original.size(); i++)
+      sortedOriginalCopy.push(original[i]);
+    sort(sortedOriginalCopy);
+    if (sortedLearntCopy.size() == original.size())
     {
-      vec<Lit> sortedOriginalCopy;
-      for (int i=0; i < original.size(); i++)
-        sortedOriginalCopy.push(original[i]);
-      sort(sortedOriginalCopy);
-
-      vec<Lit> sortedLearntCopy;
-      out_learnt.copyTo(sortedLearntCopy);
-      sort(sortedLearntCopy);
-
-      for (int i=0; i < out_learnt.size() && bNewResolvent == false; i++)
+      for (int i=0; i < sortedLearntCopy.size() && bNewResolvent == false; i++)
+      {
+        assert(level(var(sortedLearntCopy[i])) == 1);
         if (sortedOriginalCopy[i] != sortedLearntCopy[i])
-          bNewResolvent = true;
-    }
-    else bNewResolvent = true;
+        {
+          printf("%d %d\n", toInt(sortedLearntCopy[i]), toInt(sortedOriginalCopy[i]));
 
-    if (bNewResolvent) printf("Not good: %d %d\n", out_learnt.size(), original.size());
+          bNewResolvent = true;
+        }
+      }
+    }
+    else if (sortedLearntCopy.size() != trail_lim[1] - trail_lim[0])
+      bNewResolvent = true;
+
+    if (bNewResolvent)
+      {
+      printf("level 1: ");
+        for (int i=trail_lim[0]; i < trail_lim[1]; i++)
+          printf("%d ", toInt(~trail[i]));
+        printf("\n");
+        printf("Learnt: ");
+        for (int i=0; i < sortedLearntCopy.size(); i++)
+          printf("%d ", toInt(sortedLearntCopy[i]));
+        printf("\n");
+        printf("Orig: ");
+        for (int i=0; i < sortedOriginalCopy.size(); i++)
+          printf("%d ", toInt(sortedOriginalCopy[i]));
+        printf("\n");
+        printf("Not good: %d %d\n", sortedLearntCopy.size(), original.size());
+        printf("\n");
+        //assert(false);
+      }
   }
 
   v.chainClauses.clear();
