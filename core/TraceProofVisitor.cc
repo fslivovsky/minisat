@@ -72,7 +72,7 @@ namespace Minisat
     fprintf (m_out, "%d ", id);
     for (int i = 0; i < chainPivots.size (); ++i)
     {
-      if (i+1 < chainClauses.size ())
+      if (i+1 < chainClauses.size () && chainClauses [i+1] != CRef_Undef)
       {
         m_visited.has (chainClauses [i+1], id);
         fprintf (m_out, "%d ", id);
@@ -98,7 +98,7 @@ namespace Minisat
     
     for (int i = 0; i < chainPivots.size (); ++i)
     {
-      if (chainClauses [i+1] != CRef_Undef)
+      if (i + 1 < chainClauses.size () && chainClauses[i+1] != CRef_Undef)
       {
         if (!m_visited.has (chainClauses [i+1], id))
         {
@@ -124,7 +124,6 @@ namespace Minisat
   
   int TraceProofVisitor::visitChainResolvent (CRef parent)
   {
-    assert(chainClauses.size() == chainPivots.size() + 1);
     doAntecendents ();
     
     if (parent != CRef_Undef)
@@ -140,7 +139,7 @@ namespace Minisat
     fprintf (m_out, "%d ", id);
     for (int i = 0; i < chainPivots.size (); ++i)
     {
-      if (chainClauses [i+1] != CRef_Undef)
+      if (i+1 < chainClauses.size () && chainClauses[i+1] != CRef_Undef)
       {
         m_visited.has (chainClauses [i+1], id);
         fprintf (m_out, "%d ", id);
