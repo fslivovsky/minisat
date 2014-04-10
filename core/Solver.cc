@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "core/Solver.h"
 #include "core/ProofVisitor.h"
 
+#include <set>
 using namespace Minisat;
 
 //=================================================================================================
@@ -346,6 +347,7 @@ void Solver::replay (ProofVisitor& v)
 
   labelLevel0(v);
 
+  bool bConflict = false;
   for (int i = 0; i < proof.size (); ++i)
     {
       if (verbosity >= 2) fflush (stdout);
@@ -389,13 +391,17 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
+      fixed.clear();
       vec<Lit> learnt;
       Range range;
       if (traverse(v, cr, p, totalPart.max(), learnt, range))
       //if (traverseProof (v, cr, p))
       {
-        ca[cr].part(range);
-        v.visitChainResolvent(cr);
+        if (v.chainPivots.size() > 0)
+        {
+          ca[cr].part(range);
+          v.visitChainResolvent(cr);
+        }
         cancelUntil (0);
         c.mark (0);
         if (verbosity >= 2 && shared (cr)) printf ("S");
@@ -418,6 +424,8 @@ void Solver::replay (ProofVisitor& v)
           }
         }
         else attachClause (cr);
+
+        fixed.clear();
       }
       else 
       {
@@ -427,6 +435,31 @@ void Solver::replay (ProofVisitor& v)
         // -- proof.
         c.core (0);
         cancelUntil (0);
+      }
+
+      bool bConflict = false;
+      // --Take care of fixed units.
+      for (int cls = 0; cls < fixed.size() && bConflict == false; cls++)
+      {
+        Clause& fix = ca[fixed[cls]];
+        if (fix.size () <= 1 || value (fix[1]) == l_False)
+        {
+          if (value (fix[0]) != l_Undef) continue;
+
+#if DNDEBUG
+          for (int j = 1; j < fix.size () && unit; ++j)
+            assert (value (fix[j]) == l_False);
+#endif
+          uncheckedEnqueue (fix[0], cr);
+          confl = propagate (true);
+          labelLevel0(v);
+          // -- if got a conflict at level 0, bail out
+          if (confl != CRef_Undef)
+          {
+            labelFinal(v, confl);
+            bConflict = true;
+          }
+        }
       }
     }
 
@@ -534,6 +567,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
 bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, vec<Lit>& out_learnt, Range& range)
 {
   vec<char> mySeen(nVars(), 0);
+  vec<char> learntSeen(nVars(), 0);
   int pathC = 0;
   int pathZero = 0;
 
@@ -590,10 +624,10 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, v
             pathZero++;
           }
           else
-            out_learnt.push(q);
+            if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
         }
         else
-          out_learnt.push(q);
+          if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
       }
     }
     if (pathC == 0) break;
@@ -601,7 +635,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, v
     // Select next clause to look at:
     while (!mySeen[var(trail[index--])]);
     p     = trail[index+1];
-    // We resolve with p
+    // We resolve on p
     chainPivots.push(p);
     confl = reason(var(p));
     mySeen[var(p)] = 0;
@@ -639,63 +673,6 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, v
 
     // XXX However, we know whether new clause needs to be created,
     // XXX based on whether we skipped any resolutions or fixed any clauses
-
-    vec<Lit> sortedLearntCopy;
-    out_learnt.copyTo(sortedLearntCopy);
-    sort(sortedLearntCopy);
-    for (int i=0; i < sortedLearntCopy.size()-1; i++)
-    {
-      if (sortedLearntCopy[i] == sortedLearntCopy[i+1])
-      {
-        sortedLearntCopy[i] = sortedLearntCopy[sortedLearntCopy.size() -1];
-        sortedLearntCopy.shrink(1);
-        sort(sortedLearntCopy);
-        i--;
-      }
-    }
-
-    sort(sortedLearntCopy);
-
-    Clause& original = ca[proofClause];
-    bool bNewResolvent = false;
-    vec<Lit> sortedOriginalCopy;
-    for (int i=0; i < original.size(); i++)
-      sortedOriginalCopy.push(original[i]);
-    sort(sortedOriginalCopy);
-    if (sortedLearntCopy.size() == original.size())
-    {
-      for (int i=0; i < sortedLearntCopy.size() && bNewResolvent == false; i++)
-      {
-        assert(level(var(sortedLearntCopy[i])) == 1);
-        if (sortedOriginalCopy[i] != sortedLearntCopy[i])
-        {
-          printf("%d %d\n", toInt(sortedLearntCopy[i]), toInt(sortedOriginalCopy[i]));
-
-          bNewResolvent = true;
-        }
-      }
-    }
-    else if (sortedLearntCopy.size() != trail_lim[1] - trail_lim[0])
-      bNewResolvent = true;
-
-    if (bNewResolvent)
-      {
-      printf("level 1: ");
-        for (int i=trail_lim[0]; i < trail_lim[1]; i++)
-          printf("%d ", toInt(~trail[i]));
-        printf("\n");
-        printf("Learnt: ");
-        for (int i=0; i < sortedLearntCopy.size(); i++)
-          printf("%d ", toInt(sortedLearntCopy[i]));
-        printf("\n");
-        printf("Orig: ");
-        for (int i=0; i < sortedOriginalCopy.size(); i++)
-          printf("%d ", toInt(sortedOriginalCopy[i]));
-        printf("\n");
-        printf("Not good: %d %d\n", sortedLearntCopy.size(), original.size());
-        printf("\n");
-        //assert(false);
-      }
   }
 
   v.chainClauses.clear();
@@ -742,10 +719,15 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
 
   if (bNewResolvent == true)
   {
+    LitOrderLt lt(vardata, assigns);
+    sort(learnt, lt);
     // -- Create the new clause.
     if (value(learnt[0]) == l_True)
     {
-      //assert(learnt.size() == 1 || level(var(learnt[1])) >= 1);
+#if DNDEBUG
+      for (int i=1; i < learnt.size()-1; i++)
+        assert(level(var(learnt[i])) >= level(var(learnt[i+1])));
+#endif
 
       resolvent = ca.alloc(learnt, true);
       ca[resolvent].part (range);
@@ -756,12 +738,23 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
     }
     else
     {
-      assert(value(learnt[0]) == l_False);
+#if DNDEBUG
+      for (int i=0; i < learnt.size(); i++)
+        assert(value(learnt[i]) == l_False);
+#endif
       resolvent = ca.alloc(learnt, true);
       ca[resolvent].part (range);
       learnts.push(resolvent);
       if (learnt.size() > 1) attachClause(resolvent);
     }
+
+    Clause& c = ca[resolvent];
+    c.core(1);
+    c.mark(0);
+    c.part(range);
+
+    // -- Keep track of unit-clauses, so we won't lose them when we're done.
+    if (c.size() == 1 || level(var(learnt[1])) == 0) fixed.push(resolvent);
 
     v.visitChainResolvent(resolvent);
   }
@@ -801,6 +794,7 @@ void Solver::labelLevel0(ProofVisitor& v)
       {
         r.join (trail_part[var(c[j])]);
         v.chainPivots.push (~c[j]);
+        v.chainClauses.push(CRef_Undef);
       }
       trail_part [x] = r;
       v.visitChainResolvent (q);

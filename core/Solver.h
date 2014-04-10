@@ -223,6 +223,18 @@ protected:
         VarOrderLt(const vec<double>&  act) : activity(act) { }
     };
 
+    struct LitOrderLt {
+        const vec<VarData>& vardata;
+        const vec<lbool>&   assigns;
+        bool operator () (Lit x, Lit y) const
+        {
+          if ((assigns[var(x)] ^ sign(x)) == l_True) return true;
+          if ((assigns[var(y)] ^ sign(y)) == l_True) return false;
+          return vardata[var(x)].level > vardata[var(y)].level;
+        }
+        LitOrderLt(const vec<VarData>& vd, const vec<lbool>& a) : vardata(vd), assigns(a) { }
+    };
+
     // Solver state:
     //
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
@@ -274,6 +286,7 @@ protected:
     unsigned currentPart;
     // Range that includes all partitions of clauses in the database
     Range  totalPart;
+    vec<CRef> fixed;
 
     // Main internal methods:
     //
