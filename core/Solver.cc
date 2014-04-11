@@ -756,7 +756,9 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
     c.part(range);
 
     // -- Keep track of unit-clauses, so we won't lose them when we're done.
-    if (c.size() == 1 || level(var(learnt[1])) == 0) fixed.push(resolvent);
+    if (c.size() == 1 || 
+        (value (var (learnt[1])) != l_Undef && level(var(learnt[1])) == 0)) 
+      fixed.push(resolvent);
 
     v.visitChainResolvent(resolvent);
   }
