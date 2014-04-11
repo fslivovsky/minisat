@@ -566,7 +566,8 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
-bool Solver::traverse(ProofVisitor& v, CRef proofClause, CRef confl, int part, vec<Lit>& out_learnt, Range& range)
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, 
+                      CRef confl, int part, vec<Lit>& out_learnt, Range& range)
 {
   vec<char> mySeen(nVars(), 0);
   vec<char> learntSeen(nVars(), 0);
