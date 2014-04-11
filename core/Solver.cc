@@ -452,7 +452,7 @@ void Solver::replay (ProofVisitor& v)
           for (int j = 1; j < fix.size () && unit; ++j)
             assert (value (fix[j]) == l_False);
 #endif
-          uncheckedEnqueue (fix[0], cr);
+          uncheckedEnqueue (fix[0], fixed[cls]);
           confl = propagate (true);
           labelLevel0(v);
           // -- if got a conflict at level 0, bail out
