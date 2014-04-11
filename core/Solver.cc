@@ -403,17 +403,19 @@ void Solver::replay (ProofVisitor& v)
           v.visitChainResolvent(cr);
         }
         cancelUntil (0);
-        c.mark (0);
+        // XXX At this point, reference 'c' is invalid because
+        // traverse() might create a clause and re-allocate memory
+        ca[cr].mark (0);
         if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
-        if (c.size () <= 1 || value (c[1]) == l_False)
+        if (ca[cr].size () <= 1 || value (ca[cr][1]) == l_False)
         {
-          assert (value (c[0]) == l_Undef);
+          assert (value (ca[cr][0]) == l_Undef);
 #ifndef NDEBUG
-          for (int j = 1; j < c.size (); ++j)
-            assert (value (c[j]) == l_False);
+          for (int j = 1; j < ca[cr].size (); ++j)
+            assert (value (ca[cr][j]) == l_False);
 #endif
-          uncheckedEnqueue (c[0], cr);
+          uncheckedEnqueue (ca[cr][0], cr);
           confl = propagate (true);
           labelLevel0(v);
           // -- if got a conflict at level 0, bail out
@@ -429,11 +431,11 @@ void Solver::replay (ProofVisitor& v)
       }
       else 
       {
-        assert (c.core ());
-        assert (c.mark ());
+        assert (ca[cr].core ());
+        assert (ca[cr].mark ());
         // -- mark this clause as non-core. It is not part of the
         // -- proof.
-        c.core (0);
+        ca[cr].core (0);
         cancelUntil (0);
       }
 
