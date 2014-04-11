@@ -379,7 +379,24 @@ void Solver::replay (ProofVisitor& v)
       assert (value (c[0]) == l_Undef);
 
       newDecisionLevel (); // decision level 1
-      for (int j = 0; j < c.size (); ++j) enqueue (~c[j]);
+      for (int j = 0; j < c.size (); ++j) 
+      {
+        // value(c[j]) == l_True means that c[j] literal is already in
+        // conflict with the trail. No need to propagate.
+
+        // value(c[j]) == l_False but for some k > j, value(c[k]) !=
+        // l_False causes a problem. This situation is possible when a
+        // unit clause was created on the trail but was not there
+        // during validate. This causes a problem later on when we
+        // assume that value(c[1]) == l_False means that the rest of
+        // literals are l_False as well.
+        
+
+        //assert (value (c[j]) == l_Undef || value (c[j]) == l_True);
+        enqueue (~c[j]);
+      }
+      
+      
       newDecisionLevel (); // decision level 2
       CRef p = propagate (true);
       assert (p != CRef_Undef);
