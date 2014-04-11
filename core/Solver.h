@@ -226,13 +226,32 @@ protected:
     struct LitOrderLt {
         const vec<VarData>& vardata;
         const vec<lbool>&   assigns;
+        
+      /// -- order first by levels, then by values
         bool operator () (Lit x, Lit y) const
         {
-          if ((assigns[var(x)] ^ sign(x)) == l_True) return true;
-          if ((assigns[var(y)] ^ sign(y)) == l_True) return false;
-          return vardata[var(x)].level > vardata[var(y)].level;
+          lbool xVal = assigns [var (x)] ^ sign (x);
+          lbool yVal = assigns [var (y)] ^ sign (y);
+          
+          assert (xVal != l_Undef);
+          assert (yVal != l_Undef);
+          
+          int xLvl = vardata [var(x)].level;
+          int yLvl = vardata [var(y)].level;
+          
+          if (xLvl > yLvl) return true;
+          if (xLvl < yLvl) return false;
+        
+          assert (xLvl == yLvl);
+          // l_Undef < l_True < l_False
+          if (xVal == yVal) return x < y;
+          
+          if (xVal == l_Undef) return true;
+          if (xVal == l_True) return yVal == l_False;
+          return false;
         }
-        LitOrderLt(const vec<VarData>& vd, const vec<lbool>& a) : vardata(vd), assigns(a) { }
+        LitOrderLt(const vec<VarData>& vd, const vec<lbool>& a) : 
+          vardata(vd), assigns(a) { }
     };
 
     // Solver state:
