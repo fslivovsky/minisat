@@ -420,6 +420,15 @@ void Solver::replay (ProofVisitor& v)
             if (find(learnt, l[lit]) == false)
               remove(l,l[lit]);
 
+        if (l.size() > 1 && level(var(l[1])) == 0)
+          for (int lit=2; lit < l.size(); lit++)
+            if (level(var(l[lit])) > 0)
+            {
+              Lit tmp = l[1];
+              l[1] = l[lit];
+              l[lit] = tmp;
+            }
+
         ca[cr].part(range);
         v.visitChainResolvent(cr);
         cancelUntil (0);
