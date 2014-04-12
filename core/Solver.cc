@@ -433,13 +433,7 @@ void Solver::replay (ProofVisitor& v)
           assert (value (ca[cr][0]) == l_Undef);
 #ifndef NDEBUG
           for (int j = 1; j < ca[cr].size (); ++j)
-          {
-            if (value (ca[cr][j]) != l_False)
-            {
-              for (int xx=0; xx < ca[cr].size(); xx++)
-                printf("%d: level %d\n", xx, level(var(ca[cr][xx])));
-            }
-          }
+            assert (value (ca[cr][j]) == l_False);
 #endif
           uncheckedEnqueue (ca[cr][0], cr);
           confl = propagate (true);
