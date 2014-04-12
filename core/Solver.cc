@@ -376,6 +376,15 @@ void Solver::replay (ProofVisitor& v)
       if (verbosity >= 2) printf ("v");
 
       // -- at least one literal must be undefined
+      if (value (c[0]) != l_Undef)
+        for (int j = 1; j < c.size(); j++)
+          if (value(c[j]) == l_Undef)
+          {
+            Lit tmp = c[0];
+            c[0] = c[j];
+            c[j] = tmp;
+          }
+
       assert (value (c[0]) == l_Undef);
 
       newDecisionLevel (); // decision level 1
