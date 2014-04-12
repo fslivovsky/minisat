@@ -414,11 +414,14 @@ void Solver::replay (ProofVisitor& v)
       if (traverse(v, cr, p, totalPart.max(), learnt, range))
       //if (traverseProof (v, cr, p))
       {
-        if (v.chainPivots.size() > 0)
-        {
-          ca[cr].part(range);
-          v.visitChainResolvent(cr);
-        }
+        Clause& l = ca[cr];
+        if (learnt.size() < l.size())
+          for (int lit=0; lit < l.size(); lit++)
+            if (find(learnt, l[lit]) == false)
+              remove(l,l[lit]);
+
+        ca[cr].part(range);
+        v.visitChainResolvent(cr);
         cancelUntil (0);
         // XXX At this point, reference 'c' is invalid because
         // traverse() might create a clause and re-allocate memory
@@ -430,7 +433,13 @@ void Solver::replay (ProofVisitor& v)
           assert (value (ca[cr][0]) == l_Undef);
 #ifndef NDEBUG
           for (int j = 1; j < ca[cr].size (); ++j)
-            assert (value (ca[cr][j]) == l_False);
+          {
+            if (value (ca[cr][j]) != l_False)
+            {
+              for (int xx=0; xx < ca[cr].size(); xx++)
+                printf("%d: level %d\n", xx, level(var(ca[cr][xx])));
+            }
+          }
 #endif
           uncheckedEnqueue (ca[cr][0], cr);
           confl = propagate (true);
