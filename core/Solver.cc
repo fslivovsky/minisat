@@ -426,25 +426,27 @@ void Solver::replay (ProofVisitor& v)
       {
         learnt.clear();
         range.reset();
-        bRes &= traverse(v, cr, p, part, learnt, range);
-        assert(bRes);
+        bRes = traverse(v, cr, p, part, learnt, range);
+        if (bRes == false)
+        {
+          part++;
+          continue;
+        }
         int nextPart = totalPart.max() + 1;
         for (int idx=0; idx < learnt.size(); idx++)
         {
           if (level(var (learnt[idx])) == 2)
           {
-            done = false;
             int tmp = ca[reason(var (learnt[idx]))].part().max();
             if (tmp < nextPart) nextPart = tmp;
           }
         }
         part = nextPart;
-        if (nextPart > totalPart.max()) break;
-
         LitOrderLt lt(vardata, assigns);
         sort(learnt, lt);
         if (value(learnt[0]) == l_True)
         {
+          assert(false);
     #if DNDEBUG
           for (int i=1; i < learnt.size()-1; i++)
             assert(level(var(learnt[i])) >= level(var(learnt[i+1])));
@@ -466,36 +468,24 @@ void Solver::replay (ProofVisitor& v)
           p = ca.alloc(learnt, true);
           ca[p].part (range);
           learnts.push(p);
-          if (learnt.size() > 1) attachClause(p);
+          if (learnt.size() > 1)
+            attachClause(p);
         }
 
-        Clause& newCfl = ca[p];
-        newCfl.core(1);
-        newCfl.mark(0);
-        newCfl.part(range);
+        ca[p].core(1);
+        ca[p].mark(0);
 
         v.visitChainResolvent(p);
+
+        if (nextPart > totalPart.max())
+        {
+          ca[cr].mark(0);
+          cr = p;
+          break;
+        }
       }
-      if (true)//v.chainPivots.size() > 0)
-      //if (traverseProof (v, cr, p))
+      if (bRes)
       {
-        Clause& l = ca[cr];
-        if (learnt.size() < l.size())
-          for (int lit=0; lit < l.size(); lit++)
-            if (find(learnt, l[lit]) == false)
-              remove(l,l[lit]);
-
-        if (l.size() > 1 && level(var(l[1])) == 0)
-          for (int lit=2; lit < l.size(); lit++)
-            if (level(var(l[lit])) > 0)
-            {
-              Lit tmp = l[1];
-              l[1] = l[lit];
-              l[lit] = tmp;
-            }
-
-        ca[cr].part(range);
-        v.visitChainResolvent(cr);
         cancelUntil (0);
         // XXX At this point, reference 'c' is invalid because
         // traverse() might create a clause and re-allocate memory
@@ -519,7 +509,6 @@ void Solver::replay (ProofVisitor& v)
             break;
           }
         }
-        else attachClause (cr);
 
         fixed.clear();
       }
