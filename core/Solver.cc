@@ -418,10 +418,65 @@ void Solver::replay (ProofVisitor& v)
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
       fixed.clear();
-
+      bool bRes = true;
       vec<Lit> learnt;
       Range range;
-      if (traverse(v, cr, p , totalPart.max(), learnt, range))
+      int part = ca[p].part().max();
+      while (part <= totalPart.max())
+      {
+        learnt.clear();
+        range.reset();
+        bRes &= traverse(v, cr, p, part, learnt, range);
+        assert(bRes);
+        int nextPart = totalPart.max() + 1;
+        for (int idx=0; idx < learnt.size(); idx++)
+        {
+          if (level(var (learnt[idx])) == 2)
+          {
+            done = false;
+            int tmp = ca[reason(var (learnt[idx]))].part().max();
+            if (tmp < nextPart) nextPart = tmp;
+          }
+        }
+        part = nextPart;
+        if (nextPart > totalPart.max()) break;
+
+        LitOrderLt lt(vardata, assigns);
+        sort(learnt, lt);
+        if (value(learnt[0]) == l_True)
+        {
+    #if DNDEBUG
+          for (int i=1; i < learnt.size()-1; i++)
+            assert(level(var(learnt[i])) >= level(var(learnt[i+1])));
+    #endif
+
+          p = ca.alloc(learnt, true);
+          ca[p].part (range);
+          learnts.push(p);
+          if (learnt.size() > 1) attachClause(p);
+
+          vardata[var(learnt[0])].reason = p;
+        }
+        else
+        {
+    #if DNDEBUG
+          for (int i=0; i < learnt.size(); i++)
+            assert(value(learnt[i]) == l_False);
+    #endif
+          p = ca.alloc(learnt, true);
+          ca[p].part (range);
+          learnts.push(p);
+          if (learnt.size() > 1) attachClause(p);
+        }
+
+        Clause& newCfl = ca[p];
+        newCfl.core(1);
+        newCfl.mark(0);
+        newCfl.part(range);
+
+        v.visitChainResolvent(p);
+      }
+      if (true)//v.chainPivots.size() > 0)
       //if (traverseProof (v, cr, p))
       {
         Clause& l = ca[cr];
