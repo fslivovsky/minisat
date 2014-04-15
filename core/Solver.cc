@@ -418,9 +418,10 @@ void Solver::replay (ProofVisitor& v)
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
       fixed.clear();
+
       vec<Lit> learnt;
       Range range;
-      if (traverse(v, cr, p, totalPart.max(), learnt, range))
+      if (traverse(v, cr, p , totalPart.max(), learnt, range))
       //if (traverseProof (v, cr, p))
       {
         Clause& l = ca[cr];
@@ -632,7 +633,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
       //assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it
       // will create a new clause, set it as a reason and return it.
-      confl = fixrec (v, confl, part - 1);
+      confl = fixrec (v, confl, ca[confl].part ().max ());
     }
 
     // the partition of the learned clause can be computed as the join
@@ -654,16 +655,16 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
         if (r != CRef_Undef && ca[r].part().max() <= part)
         {
           // ensure that reason (var (q)) is in correct partition
-          if (level(var(q)) > 1)
+          if (level(var(q)) > 1 || level (var (q)) == 0)
           {
             mySeen[var(q)] = 1;
             pathC++;
           }
-          else if (level(var(q)) == 0 && trail_part[var(q)].max() <= part)
+          /*else if (level(var(q)) == 0 && trail_part[var(q)].max() <= part)
           {
             mySeen[var(q)] = 1;
             pathZero++;
-          }
+          }*/
           else
             if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
         }
