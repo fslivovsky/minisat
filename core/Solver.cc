@@ -447,7 +447,10 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     // The clause is false, and results in the empty clause,
     // all are therefore seen and resolved.
     for (int i = 0; i < source.size (); ++i)
+    {
       v.chainPivots.push(~source [i]);
+      v.chainClauses.push (CRef_Undef);
+    }
     
     v.visitChainResolvent(CRef_Undef);
 }
@@ -496,6 +499,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
           v.chainClauses.push(r);
         else
         {
+            v.chainClauses.push (CRef_Undef);
             range.join(trail_part[x]);
             continue;
         }
@@ -554,6 +558,7 @@ void Solver::labelLevel0(ProofVisitor& v)
       {
         r.join (trail_part[var(c[j])]);
         v.chainPivots.push (~c[j]);
+        v.chainClauses.push (CRef_Undef);
       }
       trail_part [x] = r;
       v.visitChainResolvent (q);
