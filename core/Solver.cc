@@ -370,6 +370,9 @@ void Solver::replay (ProofVisitor& v)
       if (c.core () == 0 || c.mark () == 0 || satisfied (c))
         {
           if (verbosity >= 2) printf ("-");
+          // XXX AG: what is the reason for not detaching c here?
+          // XXX AG: if c is satisfied, it is not needed and should be deleted
+          // XXX AG: other cases I am not sure about.
           continue;
         }
 
@@ -383,27 +386,21 @@ void Solver::replay (ProofVisitor& v)
             Lit tmp = c[0];
             c[0] = c[j];
             c[j] = tmp;
+            break;
           }
 
       assert (value (c[0]) == l_Undef);
 
+      // XXX Can decide and propagate separately, like in the
+      // XXX SAT-solver 
+      // XXX This might help with restructuring the proof
+      // XXX (i.e., by asserting and propagating in a certain order), and
+      // XXX with making the algorithm more efficient by deciding when
+      // XXX there is no need to restructure because it will not yield
+      // XXX shared leaves.
       newDecisionLevel (); // decision level 1
       for (int j = 0; j < c.size (); ++j) 
-      {
-        // value(c[j]) == l_True means that c[j] literal is already in
-        // conflict with the trail. No need to propagate.
-
-        // value(c[j]) == l_False but for some k > j, value(c[k]) !=
-        // l_False causes a problem. This situation is possible when a
-        // unit clause was created on the trail but was not there
-        // during validate. This causes a problem later on when we
-        // assume that value(c[1]) == l_False means that the rest of
-        // literals are l_False as well.
-        
-
-        //assert (value (c[j]) == l_Undef || value (c[j]) == l_True);
         enqueue (~c[j]);
-      }
       
       
       newDecisionLevel (); // decision level 2
@@ -422,55 +419,63 @@ void Solver::replay (ProofVisitor& v)
       vec<Lit> learnt;
       Range range;
       int part = ca[p].part().max();
+      
       while (part <= totalPart.max())
       {
         learnt.clear();
         range.reset();
         bRes = traverse(v, cr, p, part, learnt, range);
+        
+        // XXX The handling of the case when bRes==false,
+        // XXX and the clause cr is irrelevant is inefficient.
+        // XXX In this case, the loop continues until part > totalPart.max ()
+        
+        // XXX If bRes==false, then nothing was learned. But, even in
+        // XXX that case, the conflict still contains literals at 
+        // XXX level 2.  A better way to do this is to always look at what
+        // XXX level the literals of the conflict are and start from
+        // XXX that level. Right now, this check is done on 'learnt'
+        // XXX clause, but that is only because the learnt clause is
+        // XXX treated as a conflict in the next iteration of the loop.
+        
+        // nothing learned, move to next partition
         if (bRes == false)
         {
           part++;
           continue;
         }
+        
+#if DNDEBUG
+        for (int i=0; i < learnt.size(); i++)
+          assert(value(learnt[i]) == l_False);
+#endif
+       
+        // initialize nextPart to impossibly large partition
         int nextPart = totalPart.max() + 1;
         for (int idx=0; idx < learnt.size(); idx++)
         {
           if (level(var (learnt[idx])) == 2)
           {
-            int tmp = ca[reason(var (learnt[idx]))].part().max();
-            if (tmp < nextPart) nextPart = tmp;
+            int vPart = ca[reason(var (learnt[idx]))].part().max();
+            if (vPart < nextPart) nextPart = vPart;
           }
         }
         part = nextPart;
+        
+
+        // XXX Should first check whether learnt is the same as ca[cr]
+        // XXX if it is, there is no need to allocate a new clause
+        
+
+        // -- allocate new learnt clause
         LitOrderLt lt(vardata, assigns);
         sort(learnt, lt);
-        if (value(learnt[0]) == l_True)
-        {
-          assert(false);
-    #if DNDEBUG
-          for (int i=1; i < learnt.size()-1; i++)
-            assert(level(var(learnt[i])) >= level(var(learnt[i+1])));
-    #endif
-
-          p = ca.alloc(learnt, true);
-          ca[p].part (range);
-          learnts.push(p);
-          if (learnt.size() > 1) attachClause(p);
-
-          vardata[var(learnt[0])].reason = p;
-        }
-        else
-        {
-    #if DNDEBUG
-          for (int i=0; i < learnt.size(); i++)
-            assert(value(learnt[i]) == l_False);
-    #endif
-          p = ca.alloc(learnt, true);
-          ca[p].part (range);
-          learnts.push(p);
-          if (learnt.size() > 1)
-            attachClause(p);
-        }
+        p = ca.alloc(learnt, true);
+        ca[p].part (range);
+        learnts.push(p);
+        
+        if (learnt.size() > 1)
+          attachClause(p);
 
         ca[p].core(1);
         ca[p].mark(0);
@@ -484,11 +489,10 @@ void Solver::replay (ProofVisitor& v)
           break;
         }
       }
+
       if (bRes)
       {
         cancelUntil (0);
-        // XXX At this point, reference 'c' is invalid because
-        // traverse() might create a clause and re-allocate memory
         ca[cr].mark (0);
         if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
@@ -510,10 +514,13 @@ void Solver::replay (ProofVisitor& v)
           }
         }
 
+        // XXX is fixed used?
         fixed.clear();
       }
       else 
       {
+        // ca[cr] was deduced without propagate. This means it is a
+        // duplicate of an already active clause.
         assert (ca[cr].core ());
         assert (ca[cr].mark ());
         // -- mark this clause as non-core. It is not part of the
@@ -522,6 +529,8 @@ void Solver::replay (ProofVisitor& v)
         cancelUntil (0);
       }
 
+
+      // XXX AG: Is this code still relevant?! I think it can be removed.
       bool bConflict = false;
       // --Take care of fixed units.
       for (int cls = 0; cls < fixed.size() && bConflict == false; cls++)
