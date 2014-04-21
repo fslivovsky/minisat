@@ -658,6 +658,8 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     return true;
 }
 
+// XXX AG: would be cleaner if traverse returns chainClauses and
+// XXX chainPivots instead of taking a ProofVisitor object
 bool Solver::traverse(ProofVisitor& v, CRef proofClause, 
                       CRef confl, int part, vec<Lit>& out_learnt, Range& range)
 {
@@ -686,13 +688,15 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
       //assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it
       // will create a new clause, set it as a reason and return it.
+      // XXX AG: 3rd argument seems unnecessary since fixrec can figure it out on its own.
       confl = fixrec (v, confl, ca[confl].part ().max ());
     }
 
     // the partition of the learned clause can be computed as the join
     // of partitions of all chainClauses and chainPivots.
     chainClauses.push(confl);
-
+    if (p != lit_Undef) chainPivots.push (p);
+    
     Clause& c = ca[confl];
 
     range.join(c.part());
@@ -730,14 +734,13 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
     // Select next clause to look at:
     while (!mySeen[var(trail[index--])]);
     p     = trail[index+1];
-    // We resolve on p
-    chainPivots.push(p);
     confl = reason(var(p));
     mySeen[var(p)] = 0;
     pathC--;
 
   }while (pathC >= 0);
 
+  // XXX AG: dead code? pathZero == 0 always
   for (; index >=0 && pathZero >=0; index--)
   {
     Lit q = trail[index];
@@ -753,23 +756,6 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
 
   }
 
-  if (proofClause != CRef_Undef)
-  {
-    // -- If there is no Proof Clause, we are in fixing mode
-
-    // XXX here, need to decide whether a new clause needs to be created
-    // XXX the new clause should be registered as the reason instead of
-    // XXX the old one
-
-    // XXX The decision to create a new clause depends on whether the
-    // XXX clause obtained by resolving all chain clauses and pivots is
-    // XXX different from the clause we were fixing
-
-
-    // XXX However, we know whether new clause needs to be created,
-    // XXX based on whether we skipped any resolutions or fixed any clauses
-  }
-
   v.chainClauses.clear();
   v.chainPivots.clear();
 
@@ -780,6 +766,8 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
   return true;
 
 }
+
+// XXX needs a better name than 'fixrec'
 CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
 {
   // -- Need to check if traverse should be called or not.
