@@ -785,9 +785,9 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
   bool bNewResolvent = false;
   if (learnt.size() == original.size())
   {
-    vec<Lit> sortedOriginalCopy;
-    for (int i=0; i < original.size(); i++)
-      sortedOriginalCopy.push(original[i]);
+    vec<Lit> sortedOriginalCopy (original.size ());
+    for (int i = 0; i < original.size (); ++i)
+      sortedOriginalCopy [i] = original [i];
     sort(sortedOriginalCopy);
 
     vec<Lit> sortedLearntCopy;
@@ -821,6 +821,7 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
     }
     else
     {
+      // XXX is this possible?
 #if DNDEBUG
       for (int i=0; i < learnt.size(); i++)
         assert(value(learnt[i]) == l_False);
