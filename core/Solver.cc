@@ -672,7 +672,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
   // -- literal in the new clause.
   Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
 
-  if (p != lit_Undef) out_learnt.push(p);
+  if (p != lit_Undef) out_learnt.push(p), range.join(trail_part[var(p)]);
   // Generate conflict clause:
   //
   int index   = trail.size() - 1;
