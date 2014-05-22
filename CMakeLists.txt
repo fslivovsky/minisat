@@ -24,12 +24,13 @@ mark_as_advanced(RT_LIB)
 # prefer linking with static libraries
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ${CMAKE_FIND_LIBRARY_SUFFIXES})
 
+include ("cmake/PackageOptions.cmake")
+
 include_directories(
   ${CMAKE_CURRENT_BINARY_DIR}/include
-  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${MINISAT_INCLUDE_DIR}
   )
 
-add_definitions(-D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
 
 add_subdirectory(utils)
 add_subdirectory(core)
