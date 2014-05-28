@@ -1007,7 +1007,7 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 
         trail_part [x] = c.part ();
         for (int i = 1; i < c.size (); ++i)
-          trail_part [x].join (ca [reason (var (c[i]))].part ());
+          trail_part [x].join (trail_part[var (c[i])]);
       }
 
 }
