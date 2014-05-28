@@ -42,7 +42,7 @@ static BoolOption    opt_rnd_init_act      (_cat, "rnd-init",    "Randomize the 
 static BoolOption    opt_luby_restart      (_cat, "luby",        "Use the Luby restart sequence", true);
 static IntOption     opt_restart_first     (_cat, "rfirst",      "The base restart interval", 100, IntRange(1, INT32_MAX));
 static DoubleOption  opt_restart_inc       (_cat, "rinc",        "Restart interval increase factor", 2, DoubleRange(1, false, HUGE_VAL, false));
-static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  HUGE_VAL, DoubleRange(0, false, HUGE_VAL, false));
+static DoubleOption  opt_garbage_frac      (_cat, "gc-frac",     "The fraction of wasted memory allowed before a garbage collection is triggered",  0.2 , DoubleRange(0, false, HUGE_VAL, false));
 
 static BoolOption    opt_valid             (_cat, "valid",    "Validate UNSAT answers", true);
 
@@ -1545,7 +1545,7 @@ void Solver::relocAll(ClauseAllocator& to)
 
 void Solver::garbageCollect()
 {
-  assert (!log_proof);
+  //assert (!log_proof);
     // Initialize the next region to a size corresponding to the estimated utilization degree. This
     // is not precise but should avoid some unnecessary reallocations for the new region:
     ClauseAllocator to(ca.size() - ca.wasted());
