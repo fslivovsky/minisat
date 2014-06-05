@@ -414,7 +414,6 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      fixed.clear();
       bool bRes = true;
       vec<Lit> learnt;
       Range range;
@@ -461,26 +460,31 @@ void Solver::replay (ProofVisitor& v)
           }
         }
         part = nextPart;
-        
 
-        // XXX Should first check whether learnt is the same as ca[cr]
-        // XXX if it is, there is no need to allocate a new clause
-        
+        if (clausesAreEqual(cr, learnt) == false) {
+          // -- allocate new learnt clause
+          LitOrderLt lt(vardata, assigns);
+          sort(learnt, lt);
+          p = ca.alloc(learnt, true);
+          ca[p].part (range);
+          learnts.push(p);
 
-        // -- allocate new learnt clause
-        LitOrderLt lt(vardata, assigns);
-        sort(learnt, lt);
-        p = ca.alloc(learnt, true);
-        ca[p].part (range);
-        learnts.push(p);
-        
-        if (learnt.size() > 1)
-          attachClause(p);
+          if (learnt.size() > 1)
+            attachClause(p);
 
-        ca[p].core(1);
-        ca[p].mark(0);
+          ca[p].core(1);
+          ca[p].mark(0);
 
-        v.visitChainResolvent(p);
+          v.visitChainResolvent(p);
+        }
+        else {
+          // In case the clauses are identical, we are done
+          ca[cr].part(range);
+          ca[cr].mark(0);
+          v.visitChainResolvent(cr);
+          if (ca[cr].size() > 1) attachClause(cr);
+          break;
+        }
 
         if (nextPart > totalPart.max())
         {
@@ -513,9 +517,6 @@ void Solver::replay (ProofVisitor& v)
             break;
           }
         }
-
-        // XXX is fixed used?
-        fixed.clear();
       }
       else 
       {
@@ -527,33 +528,6 @@ void Solver::replay (ProofVisitor& v)
         // -- proof.
         ca[cr].core (0);
         cancelUntil (0);
-      }
-
-
-      // XXX AG: Is this code still relevant?! I think it can be removed.
-      bool bConflict = false;
-      // --Take care of fixed units.
-      for (int cls = 0; cls < fixed.size() && bConflict == false; cls++)
-      {
-        Clause& fix = ca[fixed[cls]];
-        if (fix.size () <= 1 || value (fix[1]) == l_False)
-        {
-          if (value (fix[0]) != l_Undef) continue;
-
-#if DNDEBUG
-          for (int j = 1; j < fix.size () && unit; ++j)
-            assert (value (fix[j]) == l_False);
-#endif
-          uncheckedEnqueue (fix[0], fixed[cls]);
-          confl = propagate (true);
-          labelLevel0(v);
-          // -- if got a conflict at level 0, bail out
-          if (confl != CRef_Undef)
-          {
-            labelFinal(v, confl);
-            bConflict = true;
-          }
-        }
       }
     }
 
@@ -695,7 +669,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
     // the partition of the learned clause can be computed as the join
     // of partitions of all chainClauses and chainPivots.
     chainClauses.push(confl);
-    if (p != lit_Undef) chainPivots.push (p);
+    if (p != lit_Undef && chainClauses.size() > 1) chainPivots.push (p);
     
     Clause& c = ca[confl];
 
@@ -717,11 +691,6 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
             mySeen[var(q)] = 1;
             pathC++;
           }
-          /*else if (level(var(q)) == 0 && trail_part[var(q)].max() <= part)
-          {
-            mySeen[var(q)] = 1;
-            pathZero++;
-          }*/
           else
             if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
         }
@@ -739,22 +708,6 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
     pathC--;
 
   }while (pathC >= 0);
-
-  // XXX AG: dead code? pathZero == 0 always
-  for (; index >=0 && pathZero >=0; index--)
-  {
-    Lit q = trail[index];
-    if (!mySeen[var(q)]) continue;
-    assert(level(var(q)) == 0);
-
-    chainPivots.push(q);
-    chainClauses.push(CRef_Undef);
-    // Take care of the range
-    range.join(trail_part[var(q)]);
-
-    pathZero--;
-
-  }
 
   v.chainClauses.clear();
   v.chainPivots.clear();
@@ -781,26 +734,7 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
 
   assert(range.max() <= part);
 
-  Clause& original = ca[anchor];
-  bool bNewResolvent = false;
-  if (learnt.size() == original.size())
-  {
-    vec<Lit> sortedOriginalCopy (original.size ());
-    for (int i = 0; i < original.size (); ++i)
-      sortedOriginalCopy [i] = original [i];
-    sort(sortedOriginalCopy);
-
-    vec<Lit> sortedLearntCopy;
-    learnt.copyTo(sortedLearntCopy);
-    sort(sortedLearntCopy);
-
-    for (int i=0; i < learnt.size() && bNewResolvent == false; i++)
-      if (sortedOriginalCopy[i] != sortedLearntCopy[i])
-        bNewResolvent = true;
-  }
-  else bNewResolvent = true;
-
-  if (bNewResolvent == true)
+  if (clausesAreEqual(anchor, learnt) == false)
   {
     LitOrderLt lt(vardata, assigns);
     sort(learnt, lt);
@@ -836,11 +770,6 @@ CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
     c.core(1);
     c.mark(0);
     c.part(range);
-
-    // -- Keep track of unit-clauses, so we won't lose them when we're done.
-    if (c.size() == 1 || 
-        (value (var (learnt[1])) != l_Undef && level(var(learnt[1])) == 0)) 
-      fixed.push(resolvent);
 
     v.visitChainResolvent(resolvent);
   }
@@ -1877,4 +1806,27 @@ void Solver::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n",
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+}
+
+bool Solver::clausesAreEqual(CRef orig, const vec<Lit>& lits) const
+{
+  const Clause& original = ca[orig];
+  if (lits.size() == original.size())
+  {
+    vec<Lit> sortedOriginalCopy (original.size ());
+    for (int i = 0; i < original.size (); ++i)
+      sortedOriginalCopy [i] = original [i];
+    sort(sortedOriginalCopy);
+
+    vec<Lit> sortedLearntCopy;
+    lits.copyTo(sortedLearntCopy);
+    sort(sortedLearntCopy);
+
+    for (int i=0; i < lits.size(); i++)
+      if (sortedOriginalCopy[i] != sortedLearntCopy[i])
+        return false;
+  }
+  else return false;
+
+  return true;
 }

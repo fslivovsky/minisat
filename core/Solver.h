@@ -305,7 +305,6 @@ protected:
     unsigned currentPart;
     // Range that includes all partitions of clauses in the database
     Range  totalPart;
-    vec<CRef> fixed;
 
     // Main internal methods:
     //
@@ -354,6 +353,7 @@ protected:
     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool     withinBudget     ()      const;
 
+    bool     clausesAreEqual(CRef orig, const vec<Lit>& lits) const;
     // Static helpers:
     //
 
