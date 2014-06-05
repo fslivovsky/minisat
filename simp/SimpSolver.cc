@@ -264,10 +264,10 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
     }
     
     attachClause(cr);
-    remove(occurs[var(l)], cr);
-    n_occ[toInt(l)]--;
-    updateElimHeap(var(l));
   }
+  remove(occurs[var(l)], cr);
+  n_occ[toInt(l)]--;
+  updateElimHeap(var(l));
 
   if (proofLogging ())
   {
@@ -284,7 +284,7 @@ bool SimpSolver::strengthenClause (CRef cr, Lit l)
   
   // -- remove a clause if it is satisfied already
   // XXX something breaks when remove sat unit clauses
-  if ((c.size () > 1 && value (c[0]) == l_True) ||
+  if ((value (c[0]) == l_True) ||
       (c.size () > 1 && value (c[1]) == l_True))
     removeClause (cr);
   else if (c.size () == 1 || (value (c[0]) == l_Undef && value (c[1]) == l_False))
@@ -400,7 +400,7 @@ bool SimpSolver::implied(const vec<Lit>& c)
     for (int i = 0; i < c.size(); i++)
         if (value(c[i]) == l_True){
             cancelUntil(0);
-            return false;
+            return true;
         }else if (value(c[i]) != l_False){
             assert(value(c[i]) == l_Undef);
             uncheckedEnqueue(~c[i]);
