@@ -104,6 +104,8 @@ Solver::Solver() :
   , asynch_interrupt   (false)
   , currentPart (1)
   , start(0)
+  , totalPart(1)
+  , reorder_proof(false)
 {}
 
 
@@ -419,6 +421,8 @@ void Solver::replay (ProofVisitor& v)
       Range range;
       int part = ca[p].part().max();
       
+      if (reorder_proof == false) part = totalPart.max();
+
       while (part <= totalPart.max())
       {
         learnt.clear();
@@ -657,7 +661,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
   do{
     assert(confl != CRef_Undef); // (otherwise should be UIP)
 
-    if (ca[confl].part ().max () < part)
+    if (reorder_proof && ca[confl].part ().max () < part)
     {
       //assert(p != lit_Undef); // Cannot be entered in the first iteration
       // fixrec checks whether confl needs fixing. If it does, it

@@ -161,9 +161,10 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
-    void setCurrentPart(unsigned n)     { currentPart = n; }
-    unsigned getCurrentPart ()          { return currentPart; }
-    Range    getTotalPart ()            { return totalPart; }
+    void     setCurrentPart(unsigned n) { currentPart = n;        }
+    unsigned getCurrentPart ()          { return currentPart;     }
+    Range    getTotalPart ()            { return totalPart;       }
+    void     reorderProof(bool reorder) { reorder_proof = reorder;}
   
 
   Range part (Var v) const   { assert(partInfo.size() > v); return partInfo[v]; }
@@ -302,9 +303,10 @@ protected:
 
     // Interpolation related data structures
     vec<Range> partInfo;
-    unsigned currentPart;
+    unsigned   currentPart;
     // Range that includes all partitions of clauses in the database
-    Range  totalPart;
+    Range      totalPart;
+    bool       reorder_proof;
 
     // Main internal methods:
     //
