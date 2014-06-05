@@ -423,7 +423,7 @@ void Solver::replay (ProofVisitor& v)
       
       if (reorder_proof == false) part = totalPart.max();
 
-      while (part <= totalPart.max())
+      while (reorder_proof && part <= totalPart.max())
       {
         learnt.clear();
         range.reset();
@@ -498,6 +498,9 @@ void Solver::replay (ProofVisitor& v)
         }
       }
 
+      if (reorder_proof == false)
+        bRes = traverseProof(v, cr, p);
+
       if (bRes)
       {
         cancelUntil (0);
@@ -520,7 +523,7 @@ void Solver::replay (ProofVisitor& v)
             labelFinal(v, confl);
             break;
           }
-        }
+        } else if (reorder_proof == false) attachClause(cr);
       }
       else 
       {
