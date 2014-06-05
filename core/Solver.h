@@ -92,6 +92,8 @@ public:
     void labelLevel0(ProofVisitor& v);
     bool traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
     void labelFinal(ProofVisitor& v, CRef confl);
+    CRef fixrec(ProofVisitor& v, CRef anchor, int part);
+    bool traverse(ProofVisitor& v, CRef proofClause, CRef reason, int part, vec<Lit>& out_learnt, Range& range);
 
     // Variable mode:
     // 
@@ -159,9 +161,10 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
-    void setCurrentPart(unsigned n)     { currentPart = n; }
-    unsigned getCurrentPart ()          { return currentPart; }
-    Range    getTotalPart ()            { return totalPart; }
+    void     setCurrentPart(unsigned n) { currentPart = n;        }
+    unsigned getCurrentPart ()          { return currentPart;     }
+    Range    getTotalPart ()            { return totalPart;       }
+    void     reorderProof(bool reorder) { reorder_proof = reorder;}
   
 
   Range part (Var v) const   { assert(partInfo.size() > v); return partInfo[v]; }
@@ -221,6 +224,37 @@ protected:
         VarOrderLt(const vec<double>&  act) : activity(act) { }
     };
 
+    struct LitOrderLt {
+        const vec<VarData>& vardata;
+        const vec<lbool>&   assigns;
+        
+      /// -- order first by levels, then by values
+        bool operator () (Lit x, Lit y) const
+        {
+          lbool xVal = assigns [var (x)] ^ sign (x);
+          lbool yVal = assigns [var (y)] ^ sign (y);
+          
+          assert (xVal != l_Undef);
+          assert (yVal != l_Undef);
+          
+          int xLvl = vardata [var(x)].level;
+          int yLvl = vardata [var(y)].level;
+          
+          if (xLvl > yLvl) return true;
+          if (xLvl < yLvl) return false;
+        
+          assert (xLvl == yLvl);
+          // l_Undef < l_True < l_False
+          if (xVal == yVal) return x < y;
+          
+          if (xVal == l_Undef) return true;
+          if (xVal == l_True) return yVal == l_False;
+          return false;
+        }
+        LitOrderLt(const vec<VarData>& vd, const vec<lbool>& a) : 
+          vardata(vd), assigns(a) { }
+    };
+
     // Solver state:
     //
     bool                ok;               // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
@@ -269,9 +303,10 @@ protected:
 
     // Interpolation related data structures
     vec<Range> partInfo;
-    unsigned currentPart;
+    unsigned   currentPart;
     // Range that includes all partitions of clauses in the database
-    Range  totalPart;
+    Range      totalPart;
+    bool       reorder_proof;
 
     // Main internal methods:
     //
@@ -320,6 +355,7 @@ protected:
     double   progressEstimate ()      const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool     withinBudget     ()      const;
 
+    bool     clausesAreEqual(CRef orig, const vec<Lit>& lits) const;
     // Static helpers:
     //
 

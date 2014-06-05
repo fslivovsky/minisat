@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "core/Solver.h"
 #include "core/ProofVisitor.h"
 
+#include <set>
 using namespace Minisat;
 
 //=================================================================================================
@@ -103,6 +104,8 @@ Solver::Solver() :
   , asynch_interrupt   (false)
   , currentPart (1)
   , start(0)
+  , totalPart(1)
+  , reorder_proof(false)
 {}
 
 
@@ -346,6 +349,7 @@ void Solver::replay (ProofVisitor& v)
 
   labelLevel0(v);
 
+  bool bConflict = false;
   for (int i = 0; i < proof.size (); ++i)
     {
       if (verbosity >= 2) fflush (stdout);
@@ -368,16 +372,39 @@ void Solver::replay (ProofVisitor& v)
       if (c.core () == 0 || c.mark () == 0 || satisfied (c))
         {
           if (verbosity >= 2) printf ("-");
+          // XXX AG: what is the reason for not detaching c here?
+          // XXX AG: if c is satisfied, it is not needed and should be deleted
+          // XXX AG: other cases I am not sure about.
           continue;
         }
 
       if (verbosity >= 2) printf ("v");
 
       // -- at least one literal must be undefined
+      if (value (c[0]) != l_Undef)
+        for (int j = 1; j < c.size(); j++)
+          if (value(c[j]) == l_Undef)
+          {
+            Lit tmp = c[0];
+            c[0] = c[j];
+            c[j] = tmp;
+            break;
+          }
+
       assert (value (c[0]) == l_Undef);
 
+      // XXX Can decide and propagate separately, like in the
+      // XXX SAT-solver 
+      // XXX This might help with restructuring the proof
+      // XXX (i.e., by asserting and propagating in a certain order), and
+      // XXX with making the algorithm more efficient by deciding when
+      // XXX there is no need to restructure because it will not yield
+      // XXX shared leaves.
       newDecisionLevel (); // decision level 1
-      for (int j = 0; j < c.size (); ++j) enqueue (~c[j]);
+      for (int j = 0; j < c.size (); ++j) 
+        enqueue (~c[j]);
+      
+      
       newDecisionLevel (); // decision level 2
       CRef p = propagate (true);
       assert (p != CRef_Undef);
@@ -389,20 +416,102 @@ void Solver::replay (ProofVisitor& v)
 
       // -- undelete the clause and attach it to the database
       // -- unless the learned clause is already in the database
-      if (traverseProof (v, cr, p))
+      bool bRes = true;
+      vec<Lit> learnt;
+      Range range;
+      int part = ca[p].part().max();
+      
+      if (reorder_proof == false) part = totalPart.max();
+
+      while (part <= totalPart.max())
+      {
+        learnt.clear();
+        range.reset();
+        bRes = traverse(v, cr, p, part, learnt, range);
+        
+        // XXX The handling of the case when bRes==false,
+        // XXX and the clause cr is irrelevant is inefficient.
+        // XXX In this case, the loop continues until part > totalPart.max ()
+        
+        // XXX If bRes==false, then nothing was learned. But, even in
+        // XXX that case, the conflict still contains literals at 
+        // XXX level 2.  A better way to do this is to always look at what
+        // XXX level the literals of the conflict are and start from
+        // XXX that level. Right now, this check is done on 'learnt'
+        // XXX clause, but that is only because the learnt clause is
+        // XXX treated as a conflict in the next iteration of the loop.
+        
+        // nothing learned, move to next partition
+        if (bRes == false)
+        {
+          part++;
+          continue;
+        }
+        
+#if DNDEBUG
+        for (int i=0; i < learnt.size(); i++)
+          assert(value(learnt[i]) == l_False);
+#endif
+       
+        // initialize nextPart to impossibly large partition
+        int nextPart = totalPart.max() + 1;
+        for (int idx=0; idx < learnt.size(); idx++)
+        {
+          if (level(var (learnt[idx])) == 2)
+          {
+            int vPart = ca[reason(var (learnt[idx]))].part().max();
+            if (vPart < nextPart) nextPart = vPart;
+          }
+        }
+        part = nextPart;
+
+        if (clausesAreEqual(cr, learnt) == false) {
+          // -- allocate new learnt clause
+          LitOrderLt lt(vardata, assigns);
+          sort(learnt, lt);
+          p = ca.alloc(learnt, true);
+          ca[p].part (range);
+          learnts.push(p);
+
+          if (learnt.size() > 1)
+            attachClause(p);
+
+          ca[p].core(1);
+          ca[p].mark(0);
+
+          v.visitChainResolvent(p);
+        }
+        else {
+          // In case the clauses are identical, we are done
+          ca[cr].part(range);
+          ca[cr].mark(0);
+          v.visitChainResolvent(cr);
+          if (ca[cr].size() > 1) attachClause(cr);
+          break;
+        }
+
+        if (nextPart > totalPart.max())
+        {
+          ca[cr].mark(0);
+          cr = p;
+          break;
+        }
+      }
+
+      if (bRes)
       {
         cancelUntil (0);
-        c.mark (0);
+        ca[cr].mark (0);
         if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
-        if (c.size () <= 1 || value (c[1]) == l_False)
+        if (ca[cr].size () <= 1 || value (ca[cr][1]) == l_False)
         {
-          assert (value (c[0]) == l_Undef);
+          assert (value (ca[cr][0]) == l_Undef);
 #ifndef NDEBUG
-          for (int j = 1; j < c.size (); ++j)
-            assert (value (c[j]) == l_False);
+          for (int j = 1; j < ca[cr].size (); ++j)
+            assert (value (ca[cr][j]) == l_False);
 #endif
-          uncheckedEnqueue (c[0], cr);
+          uncheckedEnqueue (ca[cr][0], cr);
           confl = propagate (true);
           labelLevel0(v);
           // -- if got a conflict at level 0, bail out
@@ -412,15 +521,16 @@ void Solver::replay (ProofVisitor& v)
             break;
           }
         }
-        else attachClause (cr);
       }
       else 
       {
-        assert (c.core ());
-        assert (c.mark ());
+        // ca[cr] was deduced without propagate. This means it is a
+        // duplicate of an already active clause.
+        assert (ca[cr].core ());
+        assert (ca[cr].mark ());
         // -- mark this clause as non-core. It is not part of the
         // -- proof.
-        c.core (0);
+        ca[cr].core (0);
         cancelUntil (0);
       }
     }
@@ -449,9 +559,8 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
     for (int i = 0; i < source.size (); ++i)
     {
       v.chainPivots.push(~source [i]);
-      v.chainClauses.push (CRef_Undef);
+      v.chainClauses.push(CRef_Undef);
     }
-    
     v.visitChainResolvent(CRef_Undef);
 }
 
@@ -499,7 +608,7 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
           v.chainClauses.push(r);
         else
         {
-            v.chainClauses.push (CRef_Undef);
+            v.chainClauses.push(CRef_Undef);
             range.join(trail_part[x]);
             continue;
         }
@@ -524,6 +633,151 @@ bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
     ca[proofClause].part(range);
     v.visitChainResolvent(proofClause);
     return true;
+}
+
+// XXX AG: would be cleaner if traverse returns chainClauses and
+// XXX chainPivots instead of taking a ProofVisitor object
+bool Solver::traverse(ProofVisitor& v, CRef proofClause, 
+                      CRef confl, int part, vec<Lit>& out_learnt, Range& range)
+{
+  vec<char> mySeen(nVars(), 0);
+  vec<char> learntSeen(nVars(), 0);
+  int pathC = 0;
+  int pathZero = 0;
+
+  // -- If p is not  Undef, then the pivot remains p, thus must be the first
+  // -- literal in the new clause.
+  Lit p = value (ca[confl][0]) == l_True ? ca[confl][0] : lit_Undef;
+
+  if (p != lit_Undef) out_learnt.push(p);
+  // Generate conflict clause:
+  //
+  int index   = trail.size() - 1;
+
+  vec<Lit> chainPivots;
+  vec<CRef> chainClauses;
+
+  do{
+    assert(confl != CRef_Undef); // (otherwise should be UIP)
+
+    if (reorder_proof && ca[confl].part ().max () < part)
+    {
+      //assert(p != lit_Undef); // Cannot be entered in the first iteration
+      // fixrec checks whether confl needs fixing. If it does, it
+      // will create a new clause, set it as a reason and return it.
+      // XXX AG: 3rd argument seems unnecessary since fixrec can figure it out on its own.
+      confl = fixrec (v, confl, ca[confl].part ().max ());
+    }
+
+    // the partition of the learned clause can be computed as the join
+    // of partitions of all chainClauses and chainPivots.
+    chainClauses.push(confl);
+    if (p != lit_Undef && chainClauses.size() > 1) chainPivots.push (p);
+    
+    Clause& c = ca[confl];
+
+    range.join(c.part());
+
+    assert (c.part ().max () <= part);
+
+    for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++){
+      Lit q = c[j];
+
+      if (!mySeen[var(q)]){
+        // -- don't resolve with clauses from higher partitions
+        CRef r = reason(var(q));
+        if (r != CRef_Undef && ca[r].part().max() <= part)
+        {
+          // ensure that reason (var (q)) is in correct partition
+          if (level(var(q)) > 1 || level (var (q)) == 0)
+          {
+            mySeen[var(q)] = 1;
+            pathC++;
+          }
+          else
+            if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
+        }
+        else
+          if (!learntSeen[var(q)]) learntSeen[var(q)] = 1 , out_learnt.push(q);
+      }
+    }
+    if (pathC == 0) break;
+
+    // Select next clause to look at:
+    while (!mySeen[var(trail[index--])]);
+    p     = trail[index+1];
+    confl = reason(var(p));
+    mySeen[var(p)] = 0;
+    pathC--;
+
+  }while (pathC >= 0);
+
+  v.chainClauses.clear();
+  v.chainPivots.clear();
+
+  chainClauses.moveTo(v.chainClauses);
+  chainPivots.moveTo(v.chainPivots);
+
+  if (v.chainClauses.size () <= 1) return false;
+  return true;
+
+}
+
+// XXX needs a better name than 'fixrec'
+CRef Solver::fixrec(ProofVisitor& v, CRef anchor, int part)
+{
+  // -- Need to check if traverse should be called or not.
+
+  CRef resolvent = anchor;
+  vec<Lit> learnt;
+  Range range;
+  bool bRes = traverse(v, CRef_Undef, anchor, part, learnt, range);
+
+  if (bRes == false) return anchor;
+
+  assert(range.max() <= part);
+
+  if (clausesAreEqual(anchor, learnt) == false)
+  {
+    LitOrderLt lt(vardata, assigns);
+    sort(learnt, lt);
+    // -- Create the new clause.
+    if (value(learnt[0]) == l_True)
+    {
+#if DNDEBUG
+      for (int i=1; i < learnt.size()-1; i++)
+        assert(level(var(learnt[i])) >= level(var(learnt[i+1])));
+#endif
+
+      resolvent = ca.alloc(learnt, true);
+      ca[resolvent].part (range);
+      learnts.push(resolvent);
+      if (learnt.size() > 1) attachClause(resolvent);
+
+      vardata[var(learnt[0])].reason = resolvent;
+    }
+    else
+    {
+      // XXX is this possible?
+#if DNDEBUG
+      for (int i=0; i < learnt.size(); i++)
+        assert(value(learnt[i]) == l_False);
+#endif
+      resolvent = ca.alloc(learnt, true);
+      ca[resolvent].part (range);
+      learnts.push(resolvent);
+      if (learnt.size() > 1) attachClause(resolvent);
+    }
+
+    Clause& c = ca[resolvent];
+    c.core(1);
+    c.mark(0);
+    c.part(range);
+
+    v.visitChainResolvent(resolvent);
+  }
+
+	return resolvent;
 }
 
 void Solver::labelLevel0(ProofVisitor& v)
@@ -558,7 +812,7 @@ void Solver::labelLevel0(ProofVisitor& v)
       {
         r.join (trail_part[var(c[j])]);
         v.chainPivots.push (~c[j]);
-        v.chainClauses.push (CRef_Undef);
+        v.chainClauses.push(CRef_Undef);
       }
       trail_part [x] = r;
       v.visitChainResolvent (q);
@@ -1555,4 +1809,27 @@ void Solver::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n",
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+}
+
+bool Solver::clausesAreEqual(CRef orig, const vec<Lit>& lits) const
+{
+  const Clause& original = ca[orig];
+  if (lits.size() == original.size())
+  {
+    vec<Lit> sortedOriginalCopy (original.size ());
+    for (int i = 0; i < original.size (); ++i)
+      sortedOriginalCopy [i] = original [i];
+    sort(sortedOriginalCopy);
+
+    vec<Lit> sortedLearntCopy;
+    lits.copyTo(sortedLearntCopy);
+    sort(sortedLearntCopy);
+
+    for (int i=0; i < lits.size(); i++)
+      if (sortedOriginalCopy[i] != sortedLearntCopy[i])
+        return false;
+  }
+  else return false;
+
+  return true;
 }
