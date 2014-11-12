@@ -423,7 +423,7 @@ void Solver::replay (ProofVisitor& v)
       
       if (reorder_proof == false) part = totalPart.max();
 
-      while (reorder_proof && part <= totalPart.max())
+      while (part <= totalPart.max())
       {
         learnt.clear();
         range.reset();
@@ -498,9 +498,6 @@ void Solver::replay (ProofVisitor& v)
         }
       }
 
-      if (reorder_proof == false)
-        bRes = traverseProof(v, cr, p);
-
       if (bRes)
       {
         cancelUntil (0);
@@ -523,7 +520,7 @@ void Solver::replay (ProofVisitor& v)
             labelFinal(v, confl);
             break;
           }
-        } else if (reorder_proof == false) attachClause(cr);
+        }
       }
       else 
       {
@@ -565,77 +562,6 @@ void Solver::labelFinal(ProofVisitor& v, CRef confl)
       v.chainClauses.push(CRef_Undef);
     }
     v.visitChainResolvent(CRef_Undef);
-}
-
-bool Solver::traverseProof(ProofVisitor& v, CRef proofClause, CRef confl)
-{
-    // The clause with which we resolve.
-    const Clause& proof = ca[proofClause];
-
-    // The conflict clause
-    const Clause& conflC = ca[confl];
-
-    int pathC = conflC.size ();
-    for (int i = 0; i < conflC.size (); ++i)
-    {
-        Var x = var (conflC [i]);
-        seen[x] = 1;
-    }
-
-    v.chainClauses.clear();
-    v.chainPivots.clear();
-
-    v.chainClauses.push(confl);
-    Range range;
-    range.join(conflC.part());
-    // Now walk up the trail.
-    for (int i = trail.size () - 1; pathC > 0; i--)
-    {
-        assert (i >= 0);
-        Var x = var (trail [i]);
-        if (!seen [x]) continue;
-
-        seen [x] = 0;
-        pathC--;
-
-        if (level(x) == 1) continue;
-
-        // --The pivot variable is x.
-
-        assert (reason (x) != CRef_Undef);
-
-        v.chainPivots.push(trail [i]);
-        CRef r = reason(x);
-        range.join(ca[r].part());
-        if (level(x) > 0)
-          v.chainClauses.push(r);
-        else
-        {
-            v.chainClauses.push(CRef_Undef);
-            range.join(trail_part[x]);
-            continue;
-        }
-
-        Clause &rC = ca [r];
-
-        assert (value (rC[0]) == l_True);
-        // -- for all other literals in the reason
-        for (int j = 1; j < rC.size (); ++j)
-        {
-            if (seen [var (rC [j])] == 0)
-            {
-                seen [var (rC [j])] = 1;
-                pathC++;
-            }
-        }
-    }
-    
-    if (v.chainClauses.size () <= 1) return false;
-    //if (range != ca[proofClause].part())
-    //    printf("(%d,%d) vs (%d,%d)\n", range.min(), range.max(), ca[proofClause].part().min(), ca[proofClause].part().max());
-    ca[proofClause].part(range);
-    v.visitChainResolvent(proofClause);
-    return true;
 }
 
 // XXX AG: would be cleaner if traverse returns chainClauses and

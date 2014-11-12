@@ -90,7 +90,6 @@ public:
     
     int start;
     void labelLevel0(ProofVisitor& v);
-    bool traverseProof(ProofVisitor& v, CRef proofClause, CRef confl);
     void labelFinal(ProofVisitor& v, CRef confl);
     CRef fixrec(ProofVisitor& v, CRef anchor, int part);
     bool traverse(ProofVisitor& v, CRef proofClause, CRef reason, int part, vec<Lit>& out_learnt, Range& range);
