@@ -306,6 +306,7 @@ protected:
     // Range that includes all partitions of clauses in the database
     Range      totalPart;
     bool       reorder_proof;
+    CRef	   confl_assumps;
 
     // Main internal methods:
     //
@@ -318,8 +319,8 @@ protected:
     void     cancelUntil      (int level);                                             // Backtrack until a certain level.
     void     analyze          (CRef confl, vec<Lit>& out_learnt, int& out_btlevel, 
                                Range &part);    // (bt = backtrack)
-    void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
-  bool     litRedundant     (Lit p, uint32_t abstract_levels, Range &part);                       // (helper method for 'analyze()')
+    void     analyzeFinal     (Lit p, vec<Lit>& out_conflict, Range& part);            // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
+    bool     litRedundant     (Lit p, uint32_t abstract_levels, Range &part);          // (helper method for 'analyze()')
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
     lbool    solve_           ();                                                      // Main solve method (assumptions given in 'assumptions').
     void     reduceDB         ();                                                      // Reduce the set of learnt clauses.

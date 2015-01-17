@@ -37,7 +37,7 @@ static DoubleOption  opt_var_decay         (_cat, "var-decay",   "The variable a
 static DoubleOption  opt_clause_decay      (_cat, "cla-decay",   "The clause activity decay factor",              0.999,    DoubleRange(0, false, 1, false));
 static DoubleOption  opt_random_var_freq   (_cat, "rnd-freq",    "The frequency with which the decision heuristic tries to choose a random variable", 0, DoubleRange(0, true, 1, true));
 static DoubleOption  opt_random_seed       (_cat, "rnd-seed",    "Used by the random variable selection",         91648253, DoubleRange(0, false, HUGE_VAL, false));
-static IntOption     opt_ccmin_mode        (_cat, "ccmin-mode",  "Controls conflict clause minimization (0=none, 1=basic, 2=deep)", 0, IntRange(0, 2));
+static IntOption     opt_ccmin_mode        (_cat, "ccmin-mode",  "Controls conflict clause minimization (0=none, 1=basic, 2=deep)", 2, IntRange(0, 2));
 static IntOption     opt_phase_saving      (_cat, "phase-saving", "Controls the level of phase saving (0=none, 1=limited, 2=full)", 2, IntRange(0, 2));
 static BoolOption    opt_rnd_init_act      (_cat, "rnd-init",    "Randomize the initial activity", false);
 static BoolOption    opt_luby_restart      (_cat, "luby",        "Use the Luby restart sequence", true);
@@ -106,6 +106,7 @@ Solver::Solver() :
   , start(0)
   , totalPart(1)
   , reorder_proof(false)
+  , confl_assumps(CRef_Undef)
 {}
 
 
@@ -133,9 +134,21 @@ namespace
 bool Solver::validate ()
 {
   assert (log_proof);
-  assert (!ok);
+  assert (!ok || confl_assumps != CRef_Undef);
   assert (proof.size () > 0);
 
+  /*if (confl_assumps != CRef_Undef)
+  {
+	  Clause& c = ca[confl_assumps];
+	  for (int i=0; i < c.size(); i++)
+	  {
+		  if (value(c[i]) != l_False) {
+			  assert(value(c[i]) == l_Undef);
+		      newDecisionLevel();
+		      uncheckedEnqueue(~(c[i]));
+		  }
+	  }
+  }*/
 
   scopped_ordered_propagate scp_propagate (*this, true);
   // -- final conflict clause is in the core
@@ -150,6 +163,7 @@ bool Solver::validate ()
       ca [reason (x)].core (1);
     }
 
+  printf("Proof size: %d\nTOP is: %d and assumption is: %d,%d\n", proof.size(), confl_assumps, var(ca[confl_assumps][0]), sign(ca[confl_assumps][0]) );
   int trail_sz = trail.size ();
   ok = true;
   // -- move back through the proof, shrinking the trail and
@@ -228,7 +242,11 @@ bool Solver::validate ()
           qhead = trail.size ();
           if (trail_lim.size () > 0) trail_lim [0] = trail.size ();
           if (verbosity >= 2) printf ("V");
-          if (!validateLemma (cr)) return false;
+          if (!validateLemma (cr))
+          {
+        	  printf("Failed for i=%d...\n", i);
+        	  return false;
+          }
         }
       else if (verbosity >= 2) printf ("-");
 
@@ -283,6 +301,7 @@ bool Solver::validateLemma (CRef cr)
   if (confl == CRef_Undef)
     {
       if (verbosity >= 2) printf ("FAILED: No Conflict from propagate()\n");
+      cancelUntil(0);
       return false;
     }
   Clause &conflC = ca [confl];
@@ -340,6 +359,8 @@ void Solver::replay (ProofVisitor& v)
   assert (proof.size () > 0);
   if (verbosity >= 2) printf ("REPLAYING: ");
   
+  bool labelFinalCalled = false;
+
   // -- enter ordered propagate mode
   scopped_ordered_propagate scp_propagate (*this, true);
   
@@ -349,8 +370,9 @@ void Solver::replay (ProofVisitor& v)
 
   labelLevel0(v);
 
+  vec<CRef> newProof;
   bool bConflict = false;
-  for (int i = 0; i < proof.size (); ++i)
+  for (int i = 0; i < proof.size(); ++i)
     {
       if (verbosity >= 2) fflush (stdout);
 
@@ -371,6 +393,7 @@ void Solver::replay (ProofVisitor& v)
       // -- skip it and continue
       if (c.core () == 0 || c.mark () == 0 || satisfied (c))
         {
+    	  if (c.size () > 1) detachClause (cr);
           if (verbosity >= 2) printf ("-");
           // XXX AG: what is the reason for not detaching c here?
           // XXX AG: if c is satisfied, it is not needed and should be deleted
@@ -407,6 +430,13 @@ void Solver::replay (ProofVisitor& v)
       
       newDecisionLevel (); // decision level 2
       CRef p = propagate (true);
+      if (p == CRef_Undef)
+      {
+    	  printf ("BCP Failed at: %d out of: %d\n", i, proof.size());
+    	  enqueue(~(ca[confl_assumps][0]));
+    	  CRef p = propagate ();
+    	  if (p != CRef_Undef) printf("GREAT SUCCESS!\n");
+      }
       assert (p != CRef_Undef);
       
       // -- proof, extract interpolants, etc.
@@ -473,6 +503,10 @@ void Solver::replay (ProofVisitor& v)
           ca[p].part (range);
           learnts.push(p);
 
+          if (nextPart <= totalPart.max()) {
+			  newProof.push(p);
+          }
+
           if (learnt.size() > 1)
             attachClause(p);
 
@@ -487,6 +521,7 @@ void Solver::replay (ProofVisitor& v)
           ca[cr].mark(0);
           v.visitChainResolvent(cr);
           if (ca[cr].size() > 1) attachClause(cr);
+          newProof.push(cr);
           break;
         }
 
@@ -494,6 +529,7 @@ void Solver::replay (ProofVisitor& v)
         {
           ca[cr].mark(0);
           cr = p;
+          newProof.push(cr);
           break;
         }
       }
@@ -515,9 +551,11 @@ void Solver::replay (ProofVisitor& v)
           confl = propagate (true);
           labelLevel0(v);
           // -- if got a conflict at level 0, bail out
+          assert (confl_assumps == CRef_Undef || i < proof.size()-1);
           if (confl != CRef_Undef)
           {
             labelFinal(v, confl);
+            labelFinalCalled = true;
             break;
           }
         }
@@ -536,6 +574,11 @@ void Solver::replay (ProofVisitor& v)
     }
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
+  else if (conflict.size() > 0) {
+	  assert(!labelFinalCalled);
+	  assert(value(ca[confl_assumps][0]) == l_False);
+	  labelFinal(v, confl_assumps);
+  }
   if (verbosity >= 2)
     {
       printf ("\n");
@@ -543,6 +586,12 @@ void Solver::replay (ProofVisitor& v)
     }
 
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
+  for (int i=0; i < proof.size(); i++)
+	  ca[proof[i]].core(0);
+  proof.clear();
+  newProof.copyTo(proof);
+  for (int i=0; i < newProof.size(); i++)
+	  ca[newProof[i]].mark(0);
 }
 
 void Solver::labelFinal(ProofVisitor& v, CRef confl)
@@ -618,7 +667,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
         if (r != CRef_Undef && ca[r].part().max() <= part)
         {
           // ensure that reason (var (q)) is in correct partition
-          if (level(var(q)) > 1 || level (var (q)) == 0)
+          if (level(var(q)) > 1 || level (var (q)) <= 0)
           {
             mySeen[var(q)] = 1;
             pathC++;
@@ -716,6 +765,11 @@ void Solver::labelLevel0(ProofVisitor& v)
   {
     Lit q = trail [start++];
     Var x = var(q);
+    if (reason(x) == CRef_Undef) {
+    	// This must be an assumption
+    	assert(level(x) > 0);
+    	continue;
+    }
     assert(reason(x) != CRef_Undef);
     Clause& c = ca [reason(x)];
     Range r = c.part ();
@@ -1141,7 +1195,7 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels, Range &part)
 |    Calculates the (possibly empty) set of assumptions that led to the assignment of 'p', and
 |    stores the result in 'out_conflict'.
 |________________________________________________________________________________________________@*/
-void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
+void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict, Range& part)
 {
     out_conflict.clear();
     out_conflict.push(p);
@@ -1149,6 +1203,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
     if (decisionLevel() == 0)
         return;
 
+    //assert (!trail_part[var (p)].undef ());
     seen[var(p)] = 1;
 
     for (int i = trail.size()-1; i >= trail_lim[0]; i--){
@@ -1159,6 +1214,7 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict)
                 out_conflict.push(~trail[i]);
             }else{
                 Clause& c = ca[reason(x)];
+                if (log_proof) part.join (c.part ());
                 for (int j = 1; j < c.size(); j++)
                     if (level(var(c[j])) > 0)
                         seen[var(c[j])] = 1;
@@ -1483,7 +1539,16 @@ lbool Solver::search(int nof_conflicts)
                     // Dummy decision level:
                     newDecisionLevel();
                 }else if (value(p) == l_False){
-                    analyzeFinal(~p, conflict);
+                	part.reset();
+                	part.join(currentPart);
+                    analyzeFinal(~p, conflict, part);
+                    if (log_proof) {
+                    	vec<Lit> c;
+                    	for (int i=0; i < conflict.size(); i++) c.push(~conflict[i]);
+                    	confl_assumps = ca.alloc(c, true);
+                    	proof.push(confl_assumps);
+                    	ca[confl_assumps].part(part);
+                    }
                     return l_False;
                 }else{
                     next = p;
@@ -1556,6 +1621,13 @@ lbool Solver::solve_()
 {
     model.clear();
     conflict.clear();
+    if (confl_assumps != CRef_Undef)
+    {
+    	if (proof.last() == confl_assumps) proof.pop();
+    	ca[confl_assumps].mark(1);
+    	confl_assumps = CRef_Undef;
+    	start = 0;
+    }
     if (!ok) return l_False;
 
     solves++;
