@@ -79,7 +79,8 @@ public:
 
     // Proof validation / traversal
     bool    validate ();  // validates clausal proof
-    void    replay (ProofVisitor& v); // replays clausal proof AFTER validation
+    void    replay (ProofVisitor& v,  vec<CRef>* pOldProof = NULL); // replays clausal proof AFTER validation
+    void    runProof();
 
     bool    proofLogging () { return log_proof;}
     void    proofLogging (bool v) { log_proof = v;}

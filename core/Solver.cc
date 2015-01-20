@@ -131,6 +131,52 @@ namespace
   };
 }
 
+void Solver::runProof()
+{
+	ProofVisitor v;
+
+	for (int iter=0; iter < 2; iter++)
+	{
+		bool res = validate();
+		if (res == false)
+		{
+			printf("Validation fails after %d times\n", iter);
+			assert(false);
+		}
+
+		if (iter > 0)
+		{
+			// All clauses must be core
+			for (int i=0; i < proof.size(); i++)
+				if (ca[proof[i]].core() == 0)
+				{
+					printf("Found a non-core clause. Iteration is %d\n", iter);
+					assert(false);
+				}
+		}
+
+		vec<CRef> oldProof;
+		replay(v, &oldProof);
+
+		proof.push(oldProof.last());
+		if (iter > 1)
+		{
+			// Check that the same proof is produced
+			assert(oldProof.size() == proof.size());
+			for (int i=0; i < proof.size(); i++)
+			{
+				if (proof[i] != oldProof[i])
+				{
+					printf("Different clauses in the proof. Iteration is %d\n", iter);
+					assert(false);
+				}
+			}
+		}
+	}
+
+	start = 0;
+}
+
 bool Solver::validate ()
 {
   assert (log_proof);
@@ -353,7 +399,7 @@ bool Solver::validateLemma (CRef cr)
   return true;
 }
 
-void Solver::replay (ProofVisitor& v)
+void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
 {
   assert (log_proof);
   assert (proof.size () > 0);
@@ -589,7 +635,12 @@ void Solver::replay (ProofVisitor& v)
 	  //if (ca[proof[i]].core() == 0 && ca[proof[i]].size() > 1) detachClause(proof[i]);
 	  ca[proof[i]].core(0);
   }
-  proof.clear();
+  if (pOldProof != NULL)
+  {
+	  proof.moveTo(*pOldProof);
+  }
+  else
+	  proof.clear();
   newProof.copyTo(proof);
   for (int i=0; i < proof.size(); i++)
   {
