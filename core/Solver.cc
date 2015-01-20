@@ -122,7 +122,7 @@ namespace
   {
     Solver &m;
     bool m_mode;
-    scopped_ordered_propagate (Solver &s, bool v) : m(s) 
+    scopped_ordered_propagate (Solver &s, bool v) : m(s)
     {
       m_mode = m.orderedPropagate ();
       m.orderedPropagate (v);
@@ -144,34 +144,10 @@ void Solver::runProof()
 			assert(false);
 		}
 
-		if (iter > 0)
-		{
-			// All clauses must be core
-			for (int i=0; i < proof.size(); i++)
-				if (ca[proof[i]].core() == 0)
-				{
-					printf("Found a non-core clause. Iteration is %d\n", iter);
-					assert(false);
-				}
-		}
-
 		vec<CRef> oldProof;
 		replay(v, &oldProof);
 
 		proof.push(oldProof.last());
-		if (iter > 1)
-		{
-			// Check that the same proof is produced
-			assert(oldProof.size() == proof.size());
-			for (int i=0; i < proof.size(); i++)
-			{
-				if (proof[i] != oldProof[i])
-				{
-					printf("Different clauses in the proof. Iteration is %d\n", iter);
-					assert(false);
-				}
-			}
-		}
 	}
 
 	start = 0;
@@ -212,6 +188,7 @@ bool Solver::validate ()
   printf("Proof size: %d\nTOP is: %d and assumption is: %d,%d\n", proof.size(), confl_assumps, var(ca[confl_assumps][0]), sign(ca[confl_assumps][0]) );
   int trail_sz = trail.size ();
   ok = true;
+
   // -- move back through the proof, shrinking the trail and
   // -- validating the clauses
   for (int i = proof.size () - 2; i >= 0; i--)
@@ -230,6 +207,7 @@ bool Solver::validate ()
           c.mark (0);
           Var x = var (c[0]);
 
+          watches.cleanAll();
           // -- if non-unit clause, attach it
           if (c.size () > 1) attachClause (cr);
           else // -- if unit clause, enqueue it
@@ -240,7 +218,6 @@ bool Solver::validate ()
           if (verbosity >= 2) printf ("^");
           continue;
         }
-
       assert (c.mark () == 0);
       // -- detach the clause
       if (locked (c))
@@ -278,8 +255,6 @@ bool Solver::validate ()
       if (c.size () > 1) detachClause (cr);
       // -- mark clause deleted
       c.mark (1);
-
-
       if (c.core () == 1)
         {
           assert (value (c[0]) == l_Undef);
@@ -290,7 +265,7 @@ bool Solver::validate ()
           if (verbosity >= 2) printf ("V");
           if (!validateLemma (cr))
           {
-        	  printf("Failed for i=%d...\n", i);
+              printf("Failed for i=%d and %d...\n", i, proof[i]);
         	  return false;
           }
         }
@@ -321,6 +296,8 @@ bool Solver::validate ()
 
     }
 
+  for (int i=0; i < proof.size()-1; i++)
+  	  assert(ca[proof[i]].mark() == 1);
   if (verbosity >= 1) printf ("VALIDATED\n");
   return true;
 }
@@ -342,7 +319,6 @@ bool Solver::validateLemma (CRef cr)
 
   // -- go to decision level 2
   newDecisionLevel ();
-
   CRef confl = propagate ();
   if (confl == CRef_Undef)
     {
@@ -365,7 +341,7 @@ bool Solver::validateLemma (CRef cr)
   for (int i = 0; i < lemma.size (); ++i)
     if (value (lemma[i]) != l_Undef && level (var (lemma [i])) <= 0)
       ca[reason (var (lemma [i]))].core (1);
-  
+
   for (int i = trail.size () - 1; i >= trail_lim[1]; i--)
     {
       Var x = var (trail [i]);
@@ -404,12 +380,12 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
   assert (log_proof);
   assert (proof.size () > 0);
   if (verbosity >= 2) printf ("REPLAYING: ");
-  
+
   bool labelFinalCalled = false;
 
   // -- enter ordered propagate mode
   scopped_ordered_propagate scp_propagate (*this, true);
-  
+
   CRef confl = propagate (true);
   // -- assume that initial clause database is consistent
   assert (confl == CRef_Undef);
@@ -426,9 +402,67 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
       assert (cr != CRef_Undef);
       Clause &c = ca [cr];
 
-      // -- delete clause that was deleted before 
+      // -- delete clause that was deleted before
       // -- except for locked and core clauses
-      if (c.mark () == 0 && !locked (c) && !c.core ())
+      if (c.mark() == 0)
+      {
+    	  assert(c.learnt() == true);
+    	  if (c.core())
+    	  {
+    		  // If it is core, we do not delete it.
+
+    		  // CHECK THAT IT IS IN THE NEW PROOF OBJECT
+    		  bool b = false;
+    		  for (int j=0; !b && j < newProof.size(); j++)
+    			  if (cr == newProof[j])
+    				  b = true;
+    		  if (!b)
+    		  {
+    		      printf("My index is %d\n", i);
+    		      printf("sat=%d, learnt=%d, locked=%d\n", satisfied(c), c.learnt(), locked(c));
+    		      for (int x=0; x < proof.size(); x++)
+    		          if (x != i && proof[x] == cr) printf ("I also appear in %d\n", x);
+    		  }
+    		  assert(b || i == proof.size() - 1);
+    		  continue;
+    	  }
+
+    	  // If it is not core, and it is either not locked or satisfied, we remove it
+          if (!locked(c) || satisfied(c))
+          {
+            if (c.size () > 1) detachClause (cr);
+            c.mark (1);
+            watches.cleanAll();
+            if (verbosity >= 2) printf ("-");
+            continue;
+          }
+
+    	  if (locked(c))
+    	  {
+    		  assert(c.core());
+    		  continue;
+    	  }
+
+    	  assert(false);
+      }
+      else // c.mark() == 1
+      {
+    	  // The clause is deleted now
+
+    	  // If it is not core, it remains deleted, we do not care about it.
+    	  if (!c.core())
+    		  continue;
+
+    	  // It cannot be locked?
+    	  if (locked(c))
+    		  assert(false);
+
+    	  // If it is satisfied, we do not care about it.
+    	  if (satisfied(c)) {
+    		  continue;
+    	  }
+      }
+      /*if (c.core() == 0 || satisfied(c) || (c.mark () == 0 && !locked (c) && !c.core ()))
         {
           if (c.size () > 1) detachClause (cr);
           c.mark (1);
@@ -437,16 +471,19 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
         }
       // -- if current clause is not core or is already present or is satisfied
       // -- skip it and continue
-      if (c.core () == 0 || c.mark () == 0 || satisfied (c))
+      if (c.mark () == 0 )
         {
+    	  //if (!satisfied(c) && c.core() == 0) { if (c.size() > 1) detachClause(cr); c.mark(1);}
           if (verbosity >= 2) printf ("-");
           // XXX AG: what is the reason for not detaching c here?
           // XXX AG: if c is satisfied, it is not needed and should be deleted
           // XXX AG: other cases I am not sure about.
           continue;
-        }
+        }*/
 
       if (verbosity >= 2) printf ("v");
+
+      assert (c.mark() == 1);
 
       // -- at least one literal must be undefined
       if (value (c[0]) != l_Undef)
@@ -462,17 +499,17 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
       assert (value (c[0]) == l_Undef);
 
       // XXX Can decide and propagate separately, like in the
-      // XXX SAT-solver 
+      // XXX SAT-solver
       // XXX This might help with restructuring the proof
       // XXX (i.e., by asserting and propagating in a certain order), and
       // XXX with making the algorithm more efficient by deciding when
       // XXX there is no need to restructure because it will not yield
       // XXX shared leaves.
       newDecisionLevel (); // decision level 1
-      for (int j = 0; j < c.size (); ++j) 
+      for (int j = 0; j < c.size (); ++j)
         enqueue (~c[j]);
-      
-      
+
+
       newDecisionLevel (); // decision level 2
       CRef p = propagate (true);
       if (p == CRef_Undef)
@@ -483,7 +520,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
     	  if (p != CRef_Undef) printf("GREAT SUCCESS!\n");
       }
       assert (p != CRef_Undef);
-      
+
       // -- proof, extract interpolants, etc.
       // -- trail at decision level 0 is implied by the database
       // -- trail at decision level 1 are the decision forced by the clause
@@ -495,7 +532,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
       vec<Lit> learnt;
       Range range;
       int part = ca[p].part().max();
-      
+
       if (reorder_proof == false) part = totalPart.max();
 
       while (part <= totalPart.max())
@@ -503,31 +540,31 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
         learnt.clear();
         range.reset();
         bRes = traverse(v, cr, p, part, learnt, range);
-        
+
         // XXX The handling of the case when bRes==false,
         // XXX and the clause cr is irrelevant is inefficient.
         // XXX In this case, the loop continues until part > totalPart.max ()
-        
+
         // XXX If bRes==false, then nothing was learned. But, even in
-        // XXX that case, the conflict still contains literals at 
+        // XXX that case, the conflict still contains literals at
         // XXX level 2.  A better way to do this is to always look at what
         // XXX level the literals of the conflict are and start from
         // XXX that level. Right now, this check is done on 'learnt'
         // XXX clause, but that is only because the learnt clause is
         // XXX treated as a conflict in the next iteration of the loop.
-        
+
         // nothing learned, move to next partition
         if (bRes == false)
         {
           part++;
           continue;
         }
-        
+
 #if DNDEBUG
         for (int i=0; i < learnt.size(); i++)
           assert(value(learnt[i]) == l_False);
 #endif
-       
+
         // initialize nextPart to impossibly large partition
         int nextPart = totalPart.max() + 1;
         for (int idx=0; idx < learnt.size(); idx++)
@@ -548,6 +585,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           ca[p].part (range);
           learnts.push(p);
 
+          printf("I'm nere! %d instead of %d\n", p, cr);
 		  newProof.push(p);
 
           if (learnt.size() > 1)
@@ -555,6 +593,8 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
 
           ca[p].core(1);
           ca[p].mark(0);
+
+          ca[cr].core(0);
 
           v.visitChainResolvent(p);
         }
@@ -570,7 +610,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
 
         if (nextPart > totalPart.max())
         {
-          ca[cr].mark(0);
+          ca[cr].core(0);
           cr = p;
           if (newProof.last() != cr) newProof.push(cr);
           break;
@@ -581,7 +621,10 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
       {
         cancelUntil (0);
         ca[cr].mark (0);
-        if (newProof.last() != cr) newProof.push(cr);
+        if (newProof.last() != cr) {
+        	newProof.push(cr);
+        	assert(false);
+        }
         if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
         if (ca[cr].size () <= 1 || value (ca[cr][1]) == l_False)
@@ -604,7 +647,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           }
         }
       }
-      else 
+      else
       {
         // ca[cr] was deduced without propagate. This means it is a
         // duplicate of an already active clause.
@@ -612,7 +655,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
         assert (ca[cr].mark ());
         // -- mark this clause as non-core. It is not part of the
         // -- proof.
-        if (ca[cr].size() > 1) detachClause(cr);
+        ca[cr].mark(1);
         ca[cr].core (0);
         cancelUntil (0);
       }
@@ -630,23 +673,44 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
       fflush (stdout);
     }
 
-  if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
-  for (int i=0; i < proof.size(); i++) {
-	  //if (ca[proof[i]].core() == 0 && ca[proof[i]].size() > 1) detachClause(proof[i]);
-	  ca[proof[i]].core(0);
+  for (int i=0; i < trail.size(); i++) {
+	  CRef cr = reason(var(trail[i]));
+	  if (cr != CRef_Undef && ca[cr].learnt())
+		  assert(ca[cr].core());
   }
+
+  // Make sure all new proof clauses are core and activated
+  for (int i=0; i < newProof.size(); i++)
+	  assert(ca[newProof[i]].core() == 1 && ca[newProof[i]].mark() == 0);
+
+  if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
+
+  // Make sure that all clauses not in the new proof are deleted
+  for (int i=0; i < proof.size()-1; i++) {
+      ca[proof[i]].core(0);
+      bool b=false;
+
+      for (int j=0; j < newProof.size() && !b; j++) {
+          if (proof[i] == newProof[j])
+              b = true;
+      }
+      if (!b) {
+        if (ca[proof[i]].mark() == 0)
+        {
+            printf("sat: %d, core: %d, learnt: %d\n", satisfied(ca[proof[i]]), ca[proof[i]].core(), ca[proof[i]].learnt());
+        }
+        assert (ca[proof[i]].mark() == 1);
+      }
+  }
+
   if (pOldProof != NULL)
   {
-	  proof.moveTo(*pOldProof);
+      proof.moveTo(*pOldProof);
   }
   else
-	  proof.clear();
+      proof.clear();
+
   newProof.copyTo(proof);
-  for (int i=0; i < proof.size(); i++)
-  {
-	  ca[proof[i]].mark(0);
-	  //if (ca[proof[i]].size() > 1) attachClause(proof[i]);
-  }
 }
 
 void Solver::labelFinal(ProofVisitor& v, CRef confl)
@@ -706,7 +770,7 @@ bool Solver::traverse(ProofVisitor& v, CRef proofClause,
     // of partitions of all chainClauses and chainPivots.
     chainClauses.push(confl);
     if (p != lit_Undef && chainClauses.size() > 1) chainPivots.push (p);
-    
+
     Clause& c = ca[confl];
 
     range.join(c.part());
@@ -891,7 +955,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
 {
     assert(decisionLevel() == 0);
     assert (!log_proof || !part.undef ());
-    
+
     if (!ok) return false;
 
     // Check if clause is satisfied and remove false/duplicate literals:
@@ -962,7 +1026,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
       // -- mark variables as shared if necessary
       for (int i = 0; part.singleton () && i < ps.size (); ++i)
         partInfo [var (ps[i])].join (part);
-      
+
       CRef confl = propagate ();
       if (log_proof && confl != CRef_Undef) proof.push (confl);
       return ok = (confl == CRef_Undef);
@@ -976,7 +1040,7 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
 
         for (i = 0; part.singleton () && i < ps.size(); i++)
           partInfo[var (ps[i])].join (part);
-        
+
     }
 
     return true;
@@ -1208,7 +1272,7 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels, Range &part)
         assert(reason(var(analyze_stack.last())) != CRef_Undef);
         Clause& c = ca[reason(var(analyze_stack.last()))]; analyze_stack.pop();
         if (log_proof) lPart.join (c.part ());
-        
+
         for (int i = 1; i < c.size(); i++){
             Lit p  = c[i];
             if (!seen[var(p)]){
@@ -1320,7 +1384,7 @@ void Solver::uncheckedEnqueue(Lit p, CRef from)
 |________________________________________________________________________________________________@*/
 CRef Solver::propagate(bool coreOnly, int maxPart)
 {
-  
+
     CRef    confl     = CRef_Undef;
 
     // -- in ordered propagate mode, keep applying propagate with increasing partitions
@@ -1336,10 +1400,9 @@ CRef Solver::propagate(bool coreOnly, int maxPart)
       }
       return confl;
     }
-  
+
     int     num_props = 0;
     watches.cleanAll();
-
     while (qhead < trail.size()){
         Lit            p   = trail[qhead++];     // 'p' is enqueued fact to propagate.
         vec<Watcher>&  ws  = watches[p];
@@ -1358,7 +1421,7 @@ CRef Solver::propagate(bool coreOnly, int maxPart)
 
             if (coreOnly && !c.core ()) { *j++ = *i++; continue; }
             if (maxPart > 0 && maxPart < c.part ().max ()) { *j++ = *i++; continue; }
-            
+
             // Make sure the false literal is data[1]:
             Lit      false_lit = ~p;
             if (c[0] == false_lit)
@@ -1493,13 +1556,13 @@ bool Solver::simplify()
     				if (j != i && proof[j] == proof[i])
     					b = true;
 
-    			assert(b);
     			if (!b)
     			{
     				for (int j=i+1; j < proof.size(); j++)
     					proof[j-1] = proof[j];
     				proof.shrink(1);
     			}
+    			//assert(b);
     		}
     	}
 
