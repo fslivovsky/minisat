@@ -393,7 +393,6 @@ void Solver::replay (ProofVisitor& v)
       // -- skip it and continue
       if (c.core () == 0 || c.mark () == 0 || satisfied (c))
         {
-    	  if (c.size () > 1) detachClause (cr);
           if (verbosity >= 2) printf ("-");
           // XXX AG: what is the reason for not detaching c here?
           // XXX AG: if c is satisfied, it is not needed and should be deleted
@@ -503,9 +502,7 @@ void Solver::replay (ProofVisitor& v)
           ca[p].part (range);
           learnts.push(p);
 
-          if (nextPart <= totalPart.max()) {
-			  newProof.push(p);
-          }
+		  newProof.push(p);
 
           if (learnt.size() > 1)
             attachClause(p);
@@ -529,7 +526,7 @@ void Solver::replay (ProofVisitor& v)
         {
           ca[cr].mark(0);
           cr = p;
-          newProof.push(cr);
+          if (newProof.last() != cr) newProof.push(cr);
           break;
         }
       }
@@ -538,6 +535,7 @@ void Solver::replay (ProofVisitor& v)
       {
         cancelUntil (0);
         ca[cr].mark (0);
+        if (newProof.last() != cr) newProof.push(cr);
         if (verbosity >= 2 && shared (cr)) printf ("S");
         // -- if unit clause, add to trail and propagate
         if (ca[cr].size () <= 1 || value (ca[cr][1]) == l_False)
@@ -568,6 +566,7 @@ void Solver::replay (ProofVisitor& v)
         assert (ca[cr].mark ());
         // -- mark this clause as non-core. It is not part of the
         // -- proof.
+        if (ca[cr].size() > 1) detachClause(cr);
         ca[cr].core (0);
         cancelUntil (0);
       }
@@ -586,12 +585,17 @@ void Solver::replay (ProofVisitor& v)
     }
 
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
-  for (int i=0; i < proof.size(); i++)
+  for (int i=0; i < proof.size(); i++) {
+	  //if (ca[proof[i]].core() == 0 && ca[proof[i]].size() > 1) detachClause(proof[i]);
 	  ca[proof[i]].core(0);
+  }
   proof.clear();
   newProof.copyTo(proof);
-  for (int i=0; i < newProof.size(); i++)
-	  ca[newProof[i]].mark(0);
+  for (int i=0; i < proof.size(); i++)
+  {
+	  ca[proof[i]].mark(0);
+	  //if (ca[proof[i]].size() > 1) attachClause(proof[i]);
+  }
 }
 
 void Solver::labelFinal(ProofVisitor& v, CRef confl)
@@ -1430,6 +1434,24 @@ bool Solver::simplify()
 
     // Remove satisfied clauses:
     removeSatisfied(learnts);
+    for (int i=0; i < proof.size(); i++)
+    	if (satisfied(ca[proof[i]]) == true) {
+    		if (ca[proof[i]].mark() == 1 && ca[proof[i]].learnt() == true) {
+    			bool b = false;
+    			for (int j=0; j < proof.size() && !b; j++)
+    				if (j != i && proof[j] == proof[i])
+    					b = true;
+
+    			assert(b);
+    			if (!b)
+    			{
+    				for (int j=i+1; j < proof.size(); j++)
+    					proof[j-1] = proof[j];
+    				proof.shrink(1);
+    			}
+    		}
+    	}
+
     if (remove_satisfied)        // Can be turned off.
         removeSatisfied(clauses);
     checkGarbage();
