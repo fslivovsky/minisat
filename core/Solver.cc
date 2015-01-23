@@ -240,7 +240,7 @@ bool Solver::validate ()
                   for (int j = 1; j < rc.size (); ++j)
                     {
                       Var x = var (rc [j]);
-                      assert(reason(x) == CRef_Undef);
+                      assert(reason(x) != CRef_Undef);
                       ca [reason (x)].core (1);
                     }
                 }
