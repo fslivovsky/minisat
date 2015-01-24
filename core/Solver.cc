@@ -135,7 +135,7 @@ void Solver::runProof()
 {
 	ProofVisitor v;
 
-	for (int iter=0; iter < 2; iter++)
+	for (int iter=0; iter < 1; iter++)
 	{
 		bool res = validate();
 		if (res == false)
@@ -222,6 +222,7 @@ bool Solver::validate ()
       // -- detach the clause
       if (locked (c))
         {
+          // c.core(1); --TODO: I think this makes validate and replay slower since it puts burden on BCP
           // -- undo the bcp
           while (trail[trail_sz - 1] != c[0])
             {
@@ -234,6 +235,7 @@ bool Solver::validate ()
               CRef r = reason (x);
               assert (r != CRef_Undef);
               // -- mark literals of core clause as core
+              // ca[r].core(1); --TODO: I think this makes validate and replay slower since it puts burden on BCP
               if (ca [r].core ())
                 {
                   Clause &rc = ca [r];
@@ -289,12 +291,14 @@ bool Solver::validate ()
       assert (reason (var (trail [i])) != CRef_Undef);
       Clause &c = ca [reason (var (trail [i]))];
       // -- if c is core, mark all clauses it depends as core
-      if (c.core () == 1)
+      if (c.core () == 1) {
         for (int j = 1; j < c.size (); ++j)
           {
             Var x = var (c[j]);
             ca[reason (x)].core (1);
           }
+        qhead = i;
+      }
 
     }
 
@@ -683,11 +687,11 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
 	      if (c.learnt()) {
 	          assert(c.core());
 	          if (c.core() && c.mark() == 0 && c.reloced() == 0)
-                  learnts.push(cr);
+                  learnts.push(cr), c.reloced(1);
 	      }
 	      else {
 	          if (c.mark() == 0 && c.reloced() == 0)
-	              clauses.push(cr);
+	              clauses.push(cr), c.reloced(1);
 	      }
 	  }
   }
@@ -1597,6 +1601,7 @@ bool Solver::simplify()
 
     // Remove satisfied clauses:
     removeSatisfied(learnts);
+#if DNDEBUG
     for (int i=0; i < proof.size(); i++)
         //TODO This should be removed, it is taken care of in Replay
         //TODO but for now leaving it just to make sure
@@ -1617,6 +1622,7 @@ bool Solver::simplify()
     			assert(b);
     		}
     	}
+#endif
 
     if (remove_satisfied)        // Can be turned off.
         removeSatisfied(clauses);
