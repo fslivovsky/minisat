@@ -203,11 +203,11 @@ bool Solver::validate ()
       // -- resurect deleted clauses
       if (c.mark () == 1)
         {
+          watches.cleanAll();
           // -- undelete
           c.mark (0);
           Var x = var (c[0]);
 
-          watches.cleanAll();
           // -- if non-unit clause, attach it
           if (c.size () > 1) attachClause (cr);
           else // -- if unit clause, enqueue it
