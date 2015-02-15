@@ -165,8 +165,8 @@ public:
     unsigned getCurrentPart ()          { return currentPart;     }
     Range    getTotalPart ()            { return totalPart;       }
     void     reorderProof(bool reorder) { reorder_proof = reorder;}
+    void     coreUnits(bool core)       { core_units = core;      }
   
-
   Range part (Var v) const   { assert(partInfo.size() > v); return partInfo[v]; }
   Range getVarRange(Var v) const { return part (v); }
   Range getClsRange(CRef cls) const   { assert(cls != CRef_Undef); return ca[cls].part(); }
@@ -182,10 +182,6 @@ public:
       if (part (var (c[i])).max () <= c.part ().max ()) return false;
     return true;
   }
-  
- 
-    
-    
 
 protected:
 
@@ -308,6 +304,7 @@ protected:
     Range      totalPart;
     bool       reorder_proof;
     CRef	   confl_assumps;
+    bool       core_units;
 
     // Main internal methods:
     //

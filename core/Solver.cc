@@ -107,6 +107,7 @@ Solver::Solver() :
   , totalPart(1)
   , reorder_proof(false)
   , confl_assumps(CRef_Undef)
+  , core_units(false)
 {}
 
 
@@ -159,33 +160,41 @@ bool Solver::validate ()
   assert (!ok || confl_assumps != CRef_Undef);
   assert (proof.size () > 0);
 
-  /*if (confl_assumps != CRef_Undef)
-  {
-	  Clause& c = ca[confl_assumps];
-	  for (int i=0; i < c.size(); i++)
-	  {
-		  if (value(c[i]) != l_False) {
-			  assert(value(c[i]) == l_Undef);
-		      newDecisionLevel();
-		      uncheckedEnqueue(~(c[i]));
-		  }
-	  }
-  }*/
+  // If DB was solved under assumptions and multiple assumptions
+  // are the reason for unsatisfiability, then add them as a new
+  // learn clause, and mark this situation by
+  //
+  if (confl_assumps != CRef_Undef) {
+      Clause& c = ca[confl_assumps];
+      if (c.size() > 1) {
+          attachClause(confl_assumps);
+          learnts.push(confl_assumps);
+          proof.push(0);
+      }
+  }
 
   scopped_ordered_propagate scp_propagate (*this, true);
-  // -- final conflict clause is in the core
-  Clause &last = ca [proof.last ()];
-  last.core (1);
-  // -- mark all reasons for the final conflict as core
-  for (int i = 0; i < last.size (); i++)
-    {
-      // -- validate that the clause is really a conflict clause
-      if (value (last [i]) != l_False) return false;
-      Var x = var (last [i]);
-      ca [reason (x)].core (1);
-    }
 
-  printf("Proof size: %d\nTOP is: %d and assumption is: %d,%d\n", proof.size(), confl_assumps, var(ca[confl_assumps][0]), sign(ca[confl_assumps][0]) );
+  // -- final conflict clause is in the core
+  // If the last clause is 0, or the final conflict under assumptions
+  // contains only one literal, mark all reasons.
+  if (proof.last () != 0 ||
+      (confl_assumps != CRef_Undef && ca[confl_assumps].size() == 1)) {
+      Clause &last = (proof.last() == 0) ? ca[confl_assumps] : ca [proof.last ()];
+      last.core (1);
+      // -- mark all reasons for the final conflict as core
+      for (int i = 0; i < last.size (); i++)
+        {
+            // -- validate that the clause is really a conflict clause
+            //if (value (last [i]) != l_False) return false;
+            Var x = var (last [i]);
+            if (reason(x) != CRef_Undef) ca [reason (x)].core (1);
+        }
+  }
+  else
+      ca[proof[proof.size()-2]].core(1);
+
+  cancelUntil(0);
   int trail_sz = trail.size ();
   ok = true;
 
@@ -208,6 +217,15 @@ bool Solver::validate ()
           c.mark (0);
           Var x = var (c[0]);
 
+          // If satisfied, check that undef lits are at c[1]
+          if (satisfied(c) && c.size() > 1)
+          {
+            for (int k=1; k < c.size() && value(c[1]) != l_Undef; k++)
+                if (value(c[k]) == l_Undef){
+                    Lit l = c[1];
+                    c[1] = c[k], c[k] = l;
+                }
+          }
           // -- if non-unit clause, attach it
           if (c.size () > 1) attachClause (cr);
           else // -- if unit clause, enqueue it
@@ -222,7 +240,7 @@ bool Solver::validate ()
       // -- detach the clause
       if (locked (c))
         {
-          // c.core(1); --TODO: I think this makes validate and replay slower since it puts burden on BCP
+          if (core_units) c.core(1);
           // -- undo the bcp
           while (trail[trail_sz - 1] != c[0])
             {
@@ -235,7 +253,7 @@ bool Solver::validate ()
               CRef r = reason (x);
               assert (r != CRef_Undef);
               // -- mark literals of core clause as core
-              // ca[r].core(1); --TODO: I think this makes validate and replay slower since it puts burden on BCP
+              if (core_units) ca[r].core(1);
               if (ca [r].core ())
                 {
                   Clause &rc = ca [r];
@@ -333,11 +351,18 @@ bool Solver::validateLemma (CRef cr)
   newDecisionLevel ();
   CRef confl = propagate ();
   if (confl == CRef_Undef)
-    {
-      if (verbosity >= 2) printf ("FAILED: No Conflict from propagate()\n");
-      cancelUntil(0);
-      return false;
-    }
+  {
+      // If propagate fails, it may be due to incrementality and missing
+      // units. Update qhead and re-propagate the entire trail
+      qhead = 0;
+      confl = propagate();
+      if (confl == CRef_Undef)
+      {
+          if (verbosity >= 2) printf ("FAILED: No Conflict from propagate()\n");
+          cancelUntil(0);
+          return false;
+      }
+  }
 
   Clause &conflC = ca [confl];
   conflC.core (1);
@@ -394,8 +419,6 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
   assert (proof.size () > 0);
   if (verbosity >= 2) printf ("REPLAYING: ");
 
-  bool labelFinalCalled = false;
-
   // -- enter ordered propagate mode
   scopped_ordered_propagate scp_propagate (*this, true);
 
@@ -409,7 +432,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
   bool bConflict = false;
   for (int i = 0; i < proof.size(); ++i)
     {
-
+      if (proof[i] == 0) break;
       if (verbosity >= 2) fflush (stdout);
 
       CRef cr = proof [i];
@@ -461,24 +484,6 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
     		  continue;
     	  }
       }
-      /*if (c.core() == 0 || satisfied(c) || (c.mark () == 0 && !locked (c) && !c.core ()))
-        {
-          if (c.size () > 1) detachClause (cr);
-          c.mark (1);
-          if (verbosity >= 2) printf ("-");
-          continue;
-        }
-      // -- if current clause is not core or is already present or is satisfied
-      // -- skip it and continue
-      if (c.mark () == 0 )
-        {
-    	  //if (!satisfied(c) && c.core() == 0) { if (c.size() > 1) detachClause(cr); c.mark(1);}
-          if (verbosity >= 2) printf ("-");
-          // XXX AG: what is the reason for not detaching c here?
-          // XXX AG: if c is satisfied, it is not needed and should be deleted
-          // XXX AG: other cases I am not sure about.
-          continue;
-        }*/
 
       if (verbosity >= 2) printf ("v");
 
@@ -595,16 +600,20 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           // I think that with reordering this is not necessarily true
           ca[cr].core(0);
 
+          // In case that the last conflict is being reduced
+          // update it
+          if (cr == confl_assumps)
+              confl_assumps = p;
           v.visitChainResolvent(p);
         }
         else {
-          // In case the clauses are identical, we are done
-          ca[cr].part(range);
-          ca[cr].mark(0);
-          v.visitChainResolvent(cr);
-          if (ca[cr].size() > 1) attachClause(cr);
-          newProof.push(cr);
-          break;
+            // In case the clauses are identical, we are done
+            ca[cr].part(range);
+            ca[cr].mark(0);
+            v.visitChainResolvent(cr);
+            if (ca[cr].size() > 1) attachClause(cr);
+            newProof.push(cr);
+            break;
         }
 
         if (nextPart > totalPart.max())
@@ -664,9 +673,12 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
   else if (conflict.size() > 0) {
-	  assert(!labelFinalCalled);
-	  assert(value(ca[confl_assumps][0]) == l_False);
-	  labelFinal(v, confl_assumps);
+      if (conflict.size() == 1) {
+          assert(value(ca[confl_assumps][0]) == l_False);
+          labelFinal(v, reason(var(ca[confl_assumps][0])));
+      }
+      else
+          labelFinal(v, confl_assumps);
   }
   if (verbosity >= 2)
     {
@@ -675,41 +687,30 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
     }
 
   // Make sure learnts and clauses contain all needed clauses
-  for (int i=0; i < learnts.size(); i++)
-      ca[learnts[i]].reloced(1);
-  for (int i=0; i < clauses.size(); i++)
-      ca[clauses[i]].reloced(1);
-
-  for (int i=0; i < trail.size(); i++) {
-	  CRef cr = reason(var(trail[i]));
-	  if (cr != CRef_Undef) {
-	      Clause& c = ca[cr];
-	      if (c.learnt()) {
-	          assert(c.core());
-	          if (c.core() && c.mark() == 0 && c.reloced() == 0)
-                  learnts.push(cr), c.reloced(1);
-	      }
-	      else {
-	          if (c.mark() == 0 && c.reloced() == 0)
-	              clauses.push(cr), c.reloced(1);
-	      }
-	  }
-  }
+    for (int i=0; i < learnts.size(); i++)
+        ca[learnts[i]].reloced(1);
+    for (int i=0; i < clauses.size(); i++)
+        ca[clauses[i]].reloced(1);
+    for (int i=0; i < trail.size(); i++) {
+          CRef cr = reason(var(trail[i]));
+          if (cr != CRef_Undef) {
+              Clause& c = ca[cr];
+              if (c.mark() == 0 && c.reloced() == 0)
+                  (c.learnt() ? learnts : clauses).push(cr), c.reloced(1);
+              if (c.learnt()) assert(c.core());
+          }
+    }
 
   // Make sure all new proof clauses are core and activated
-  for (int i=0; i < newProof.size(); i++) {
-      Clause& c = ca[newProof[i]];
-	  assert(c.core() == 1 && c.mark() == 0);
-	  if (ca[newProof[i]].learnt())
-	      if (c.reloced() == 0)
-	          learnts.push(newProof[i]);
-	  else
-	      if (c.reloced() == 0)
-	          clauses.push(newProof[i]);
-  }
+    for (int i=0; i < newProof.size(); i++) {
+        Clause& c = ca[newProof[i]];
+        assert(c.core() == 1 && c.mark() == 0);
+        if (c.reloced() == 0)
+            (c.learnt() ? learnts : clauses).push(newProof[i]);
+    }
 
   // Clean mark
-  for (int i=0; i < learnts.size(); i++)
+    for (int i=0; i < learnts.size(); i++)
         ca[learnts[i]].reloced(0);
     for (int i=0; i < clauses.size(); i++)
         ca[clauses[i]].reloced(0);
@@ -717,52 +718,47 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
   if (verbosity >= 1 && confl != CRef_Undef) printf ("Replay SUCCESS\n");
 
   // Make sure that all clauses not in the new proof are deleted
-  for (int i=0; i < newProof.size(); i++)
+    for (int i=0; i < newProof.size(); i++)
         ca[newProof[i]].reloced(1);
-  for (int i=0; i < proof.size()-1; i++) {
-      CRef cr = proof[i];
-      Clause& c = ca[cr];
-      if (c.reloced() == 0) {
-        if (c.learnt()) {
+    for (int i=0; i < proof.size()-1; i++) {
+        CRef cr = proof[i];
+        Clause& c = ca[cr];
+        if (c.reloced() == 0) {
+            if (c.learnt()) {
             assert (c.mark() == 1);
             assert(c.core() == 0 || satisfied(c));
         }
         else
             assert(false);
       }
-
       ca[proof[i]].core(0);
-  }
+    }
   // Clean mark
-  for (int i=0; i < newProof.size(); i++)
-      ca[newProof[i]].reloced(0);
+    for (int i=0; i < newProof.size(); i++)
+        ca[newProof[i]].reloced(0);
+        // Remove all learnt clauses that are deleted
+          int i,j;
+          for (i=0, j=0; i < learnts.size(); i++)
+              if (ca[learnts[i]].mark() == 0)
+                  learnts[j++] = learnts[i];
+    learnts.shrink(i-j);
 
-  // Remove all learnt clauses that are deleted
-  int i,j;
-  for (i=0, j=0; i < learnts.size(); i++)
-      if (ca[learnts[i]].mark() == 0)
-          learnts[j++] = learnts[i];
-  learnts.shrink(i-j);
+    if (pOldProof != NULL)
+        proof.moveTo(*pOldProof);
+    else
+        proof.clear();
 
-
-  if (pOldProof != NULL)
-  {
-      proof.moveTo(*pOldProof);
-  }
-  else
-      proof.clear();
-
-  newProof.copyTo(proof);
+    newProof.copyTo(proof);
 
   // Clean the rest of the clauses
-  for (int i=0; i < clauses.size(); i++) {
+    for (int i=0; i < clauses.size(); i++) {
       ca[clauses[i]].core(0);
       assert(ca[clauses[i]].mark() == 0);
-  }
-  for (int i=0; i < learnts.size(); i++) {
+    }
+    for (int i=0; i < learnts.size(); i++) {
       ca[learnts[i]].core(0);
       assert(ca[learnts[i]].mark() == 0);
-  }
+    }
 }
 
 void Solver::labelFinal(ProofVisitor& v, CRef confl)
@@ -1375,7 +1371,10 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict, Range& part)
     if (decisionLevel() == 0)
         return;
 
-    //assert (!trail_part[var (p)].undef ());
+    if (log_proof) {
+        part.join(ca[reason(var(p))].part().max());
+        part.join(ca[reason(var(p))].part());
+    }
     seen[var(p)] = 1;
 
     for (int i = trail.size()-1; i >= trail_lim[0]; i--){
@@ -1390,6 +1389,8 @@ void Solver::analyzeFinal(Lit p, vec<Lit>& out_conflict, Range& part)
                 for (int j = 1; j < c.size(); j++)
                     if (level(var(c[j])) > 0)
                         seen[var(c[j])] = 1;
+                    else if (log_proof)
+                        part.join(trail_part[var(c[j])]);
             }
             seen[x] = 0;
         }
@@ -1734,11 +1735,10 @@ lbool Solver::search(int nof_conflicts)
                     newDecisionLevel();
                 }else if (value(p) == l_False){
                 	part.reset();
-                	part.join(currentPart);
                     analyzeFinal(~p, conflict, part);
                     if (log_proof) {
                     	vec<Lit> c;
-                    	for (int i=0; i < conflict.size(); i++) c.push(~conflict[i]);
+                    	for (int i=0; i < conflict.size(); i++) c.push(conflict[i]);
                     	confl_assumps = ca.alloc(c, true);
                     	proof.push(confl_assumps);
                     	ca[confl_assumps].part(part);
@@ -1817,8 +1817,7 @@ lbool Solver::solve_()
     conflict.clear();
     if (confl_assumps != CRef_Undef)
     {
-    	if (proof.last() == confl_assumps) proof.pop();
-    	ca[confl_assumps].mark(1);
+    	if (proof.size() > 0 && proof.last() == 0) proof.pop();
     	confl_assumps = CRef_Undef;
     	start = 0;
     }
@@ -1994,7 +1993,7 @@ void Solver::relocAll(ClauseAllocator& to)
 
 void Solver::garbageCollect()
 {
-    assert (!log_proof);
+    //assert (!log_proof);
     // Initialize the next region to a size corresponding to the estimated utilization degree. This
     // is not precise but should avoid some unnecessary reallocations for the new region:
     ClauseAllocator to(ca.size() - ca.wasted());
