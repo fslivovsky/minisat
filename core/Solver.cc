@@ -652,7 +652,6 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           if (confl != CRef_Undef)
           {
             labelFinal(v, confl);
-            labelFinalCalled = true;
             break;
           }
         }
