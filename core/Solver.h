@@ -344,6 +344,10 @@ protected:
 
     void     relocAll         (ClauseAllocator& to);
 
+    // FS:
+    void     assignParts      ();                      // Assign variables part ranges.
+    void     resetParts       ();                      // Set variable ranges to empty.
+
     // Misc:
     //
     int      decisionLevel    ()      const; // Gives the current decisionlevel.
@@ -354,6 +358,8 @@ protected:
     bool     withinBudget     ()      const;
 
     bool     clausesAreEqual(CRef orig, const vec<Lit>& lits) const;
+    bool     clausesAreEqual(CRef first, CRef second) const;
+    bool     clauseSubsumes(CRef first, CRef second) const;
     // Static helpers:
     //
 

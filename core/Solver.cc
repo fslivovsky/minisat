@@ -19,6 +19,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 #include <math.h>
+#include <iostream>
+#include <stdexcept>
 
 #include "mtl/Sort.h"
 #include "core/Solver.h"
@@ -329,6 +331,7 @@ bool Solver::validate ()
 
   watches.cleanAll();
   if (verbosity >= 1) printf ("VALIDATED\n");
+  assignParts(); // FS
   return true;
 }
 
@@ -423,8 +426,8 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
   scopped_ordered_propagate scp_propagate (*this, true);
 
   CRef confl = propagate (true);
-  // -- assume that initial clause database is consistent
-  assert (confl == CRef_Undef);
+  // -- assume that initial clause database is consistent 
+  assert (confl == CRef_Undef); // FS: Does anything break without this? Should disappear once we use assumption-based solving.
 
   labelLevel0(v);
 
@@ -588,7 +591,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           ca[p].part (range);
           learnts.push(p);
 
-		  newProof.push(p);
+		      newProof.push(p);
 
           if (learnt.size() > 1)
             attachClause(p);
@@ -667,13 +670,24 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
         ca[cr].mark(1);
         ca[cr].core (0);
         cancelUntil (0);
+
+        // FS
+        if (cr == confl_assumps) {
+          CRef previous_cr = proof[i-1];
+          if (!ca[previous_cr].core () || !clausesAreEqual(confl_assumps, previous_cr)) {
+            throw std::invalid_argument("Error handling duplicate clause during replay.");
+          }
+          assert (ca[previous_cr].core ());
+          assert(clausesAreEqual(confl_assumps, previous_cr));
+          confl_assumps = previous_cr;
+        }
       }
     }
 
   if (proof.size () == 1) labelFinal (v, proof [0]);
   else if (conflict.size() > 0) {
       if (conflict.size() == 1) {
-          assert(value(ca[confl_assumps][0]) == l_False);
+          //assert(value(ca[confl_assumps][0]) == l_False);
           labelFinal(v, reason(var(ca[confl_assumps][0])));
       }
       else
@@ -1072,8 +1086,8 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         uncheckedEnqueue(ps[0]);
 
       // -- mark variables as shared if necessary
-      for (int i = 0; part.singleton () && i < ps.size (); ++i)
-        partInfo [var (ps[i])].join (part);
+      /* for (int i = 0; part.singleton () && i < ps.size (); ++i)
+        partInfo [var (ps[i])].join (part); */
 
       CRef confl = propagate ();
       if (log_proof && confl != CRef_Undef) proof.push (confl);
@@ -1086,8 +1100,8 @@ bool Solver::addClause_(vec<Lit>& ps, Range part)
         totalPart.join (part);
         attachClause(cr);
 
-        for (i = 0; part.singleton () && i < ps.size(); i++)
-          partInfo[var (ps[i])].join (part);
+        /* for (i = 0; part.singleton () && i < ps.size(); i++)
+           partInfo[var (ps[i])].join (part); */
 
     }
 
@@ -1660,8 +1674,9 @@ lbool Solver::search(int nof_conflicts)
 
     for (;;){
         CRef confl = propagate();
+
         if (confl != CRef_Undef){
-            // CONFLICT
+
             conflicts++; conflictC++;
             if (decisionLevel() == 0)
               {
@@ -1766,6 +1781,24 @@ lbool Solver::search(int nof_conflicts)
     }
 }
 
+void Solver::assignParts() {
+  resetParts();
+  for (int i = 0; i < clauses.size(); i++){
+    Clause& c = ca[clauses[i]];
+    if (c.core()) {
+      for (int j = 0; j < c.size(); j++) {
+        partInfo[var (c[j])].join (c.part());
+      }
+    }
+  }
+}
+
+void Solver::resetParts() {
+  for (Var v = 0; v < nVars(); v++) {
+    partInfo[v] = Range();
+  }
+}
+
 
 double Solver::progressEstimate() const
 {
@@ -1814,6 +1847,7 @@ lbool Solver::solve_()
 {
     model.clear();
     conflict.clear();
+
     if (confl_assumps != CRef_Undef)
     {
     	if (proof.size() > 0 && proof.last() == 0) proof.pop();
@@ -2002,6 +2036,57 @@ void Solver::garbageCollect()
         printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n",
                ca.size()*ClauseAllocator::Unit_Size, to.size()*ClauseAllocator::Unit_Size);
     to.moveTo(ca);
+}
+
+bool Solver::clausesAreEqual(CRef first, CRef second) const
+{
+  const Clause& first_clause = ca[first];
+  const Clause& second_clause = ca[second];
+  if (first_clause.size() == second_clause.size())
+  {
+    vec<Lit> sortedFirstCopy (first_clause.size ());
+    for (int i = 0; i < first_clause.size (); ++i)
+      sortedFirstCopy[i] = first_clause[i];
+    sort(sortedFirstCopy);
+
+    vec<Lit> sortedSecondCopy (second_clause.size ());
+    for (int i = 0; i < second_clause.size (); ++i)
+      sortedSecondCopy[i] = second_clause[i];
+    sort(sortedSecondCopy);
+
+    for (int i=0; i < first_clause.size(); i++)
+      if (sortedFirstCopy[i] != sortedSecondCopy[i])
+        return false;
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
+bool Solver::clauseSubsumes(CRef first, CRef second) const {
+  const Clause& first_clause = ca[first];
+  const Clause& second_clause = ca[second];
+  if (first_clause.size() <= second_clause.size())
+  {
+    vec<Lit> sortedFirstCopy (first_clause.size ());
+    for (int i = 0; i < first_clause.size (); ++i)
+      sortedFirstCopy[i] = first_clause[i];
+    sort(sortedFirstCopy);
+
+    vec<Lit> sortedSecondCopy (second_clause.size ());
+    for (int i = 0; i < second_clause.size (); ++i)
+      sortedSecondCopy[i] = second_clause[i];
+    sort(sortedSecondCopy);
+
+    for (int i=0; i < first_clause.size(); i++)
+      if (sortedFirstCopy[i] != sortedSecondCopy[i])
+        return false;
+  } else {
+    return false;
+  }
+
+  return true;
 }
 
 bool Solver::clausesAreEqual(CRef orig, const vec<Lit>& lits) const
