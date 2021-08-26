@@ -86,6 +86,9 @@ public:
     void    proofLogging (bool v) { log_proof = v;}
     bool    orderedPropagate () { return ordered_propagate; }
     void    orderedPropagate (bool v) { ordered_propagate = v; }
+
+    // FS
+    void     resetSolver      ();                      // Resets solver state after replay.
   
   
     

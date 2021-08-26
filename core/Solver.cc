@@ -2111,3 +2111,23 @@ bool Solver::clausesAreEqual(CRef orig, const vec<Lit>& lits) const
 
   return true;
 }
+
+void Solver::resetSolver() {
+  for (int c = trail.size()-1; c >= 0; c--) {
+    Var      x  = var(trail[c]);
+    assigns [x] = l_Undef;
+    insertVarOrder(x);
+  }
+  qhead = 0;
+  trail.clear();
+  trail_lim.clear();
+
+  // Put units back on the trail
+  for (int i=0; i < clauses.size(); i++) {
+      Clause& c = ca[clauses[i]];
+      if (c.size() == 1)
+          enqueue(c[0], clauses[i]);
+  }
+
+  watches.cleanAll();
+}
