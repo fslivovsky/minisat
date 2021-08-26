@@ -2129,5 +2129,11 @@ void Solver::resetSolver() {
           enqueue(c[0], clauses[i]);
   }
 
+  for (int i=0; i < learnts.size(); i++) {
+      Clause& c = ca[learnts[i]];
+      if (c.size() == 1)
+          enqueue(c[0], learnts[i]);
+  }
+
   watches.cleanAll();
 }
