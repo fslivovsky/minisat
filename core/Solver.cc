@@ -524,6 +524,7 @@ void Solver::replay (ProofVisitor& v, vec<CRef>* pOldProof)
           printf ("BCP Failed at: %d out of: %d. Failure is: %d\n", i, proof.size(), cr);
     	  CRef p = propagate ();
     	  if (p != CRef_Undef) printf("GREAT SUCCESS!\n");
+        throw std::runtime_error("BCP Failure.");
       }
       assert (p != CRef_Undef);
 
